@@ -49,13 +49,25 @@ claude --plugin-dir C:\projects\claude-agent-tree
 - Subagents from the previous prompt are cleared when the next prompt spawns its first subagent; ones still running are kept. At most 20 subagents are shown.
 - Below 70 columns each detail goes on its own line, and no line ever wraps: lines longer than the pane are cut with `…`.
 
+### The web page
+
+The same tree is served as a live web page at **http://127.0.0.1:47821**. The mod starts a small Node server when the session starts and stops it with the session. If the port is in use it tries the next one, up to 47830, and the pane's last line says which address it took:
+
+```
+Web: http://127.0.0.1:47822 (47821 in use)
+```
+
+If every port is taken the line reads `Web: ports 47821-47830 in use`; without Node on the `PATH` it reads `Web: node not found`. The pane works the same either way. Each session gets its own server, so a second session takes the next free port.
+
+The page is plain HTML, CSS and JavaScript, follows the system's light or dark theme and updates through server-sent events. The server listens on `127.0.0.1` only and refuses requests whose `Host` is not `127.0.0.1` or `localhost`.
+
 ## How it works
 
 A mod is a Claude Code plugin whose hooks module runs inside the app. `agent-tree` listens to the engine's events, keeps the tree in the session state (`$.state`, key `agent-tree.tree`) and redraws the pane whenever that state changes.
 
 | Event | What the mod does |
 | --- | --- |
-| `session.start` | Registers `/agents` and opens the pane |
+| `session.start` | Registers `/agents`, opens the pane and starts the page's server |
 | `command.run` (`agents`) | Opens the pane again |
 | `turn.start` | On a new user prompt, marks the tree as stale |
 | `agent.spawn` | Adds a subagent node (clearing finished ones if stale) |
@@ -66,14 +78,18 @@ A mod is a Claude Code plugin whose hooks module runs inside the app. `agent-tre
 
 Every hook calls `next(e)`, so the mod only observes: it never changes, blocks or delays what the engine does.
 
+The page's server runs through `$.process.spawn` (`node -`, its source on stdin) and lives as long as the module. It prints `BUSY <port>`, `LISTEN <port>` or `FAILED <port> <code>`, which the mod reads into the state (`agent-tree.web`). After each change to the tree the mod sends it to the server with `$.http.fetch` (`POST /state`), and the server streams it to the open pages (`GET /events`).
+
 ### Structure
 
 ```
 .claude-plugin/plugin.json   manifest (name, version, description, types)
 hooks/hooks.json             points the engine at the hooks module
 hooks/register.tsx           the hooks and the pane drawing
-types/index.d.ts             type contract of the state (AgentNode, Tree)
-tests/pane.test.tsx          test with the claude-code/testing kit
+types/index.d.ts             type contract of the state (AgentNode, Tree, Web)
+web/page.ts                  the web page (HTML, CSS, JS) as a string
+web/server.ts                the Node server's source and its ports
+tests/pane.test.tsx          tests with the claude-code/testing kit
 tsconfig.json                extends the types the engine generates
 ```
 

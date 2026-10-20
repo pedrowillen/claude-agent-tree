@@ -112,14 +112,15 @@ const detailLines = (a: AgentNode, isNarrow: boolean): string[] => {
 
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
-    await $.command.register({ name: 'agents', description: 'Open the pane with the agent tree' })
-    void $.ui.open({ id: PANE, title: 'Agents' })
+    // the server lives as long as the session: its child ends with the module
     void serve($)
+    void $.ui.open({ id: PANE, title: 'Agents' })
+    await $.command.register({ name: 'agent-tree', description: 'Open the pane with the agent tree' })
 
     return next(e)
   })
 
-  on('command.run', { command: 'agents' }, async $ => {
+  on('command.run', { command: 'agent-tree' }, async $ => {
     await $.ui.open({ id: PANE, title: 'Agents' })
 
     return { text: 'Agents pane opened.' }
@@ -136,7 +137,7 @@ export const register: Register = on => {
     const spawned = await next(e)
     if (spawned.agentId === undefined) return spawned
 
-    const added = node(spawned.agentId, e.subagentType, e.description, spawned.model)
+    const added = { ...node(spawned.agentId, e.subagentType, e.description, spawned.model), parentId: e.parentAgentId }
     await save($, t => {
       const kept = t.isStale ? t.agents.filter(a => a.status === 'running') : t.agents
 

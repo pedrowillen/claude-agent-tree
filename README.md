@@ -33,7 +33,7 @@ Subagents: 12.4k in / 0.6k out
 
 3. Quit the Claude desktop app completely and open it again, so new sessions see the variable.
 
-4. Start a session in the **Code** tab. The **Agents** pane opens on its own; if you close it, run `/agents` to bring it back.
+4. Start a session in the **Code** tab. The **Agents** pane opens on its own; if you close it, run `/agent-tree` to bring it back.
 
 From the terminal CLI, you can load it for a single session instead:
 
@@ -67,8 +67,8 @@ A mod is a Claude Code plugin whose hooks module runs inside the app. `agent-tre
 
 | Event | What the mod does |
 | --- | --- |
-| `session.start` | Registers `/agents`, opens the pane and starts the page's server |
-| `command.run` (`agents`) | Opens the pane again |
+| `session.start` | Starts the page's server (kept up until the session ends), opens the pane and registers `/agent-tree` |
+| `command.run` (`agent-tree`) | Opens the pane again |
 | `turn.start` | On a new user prompt, marks the tree as stale |
 | `agent.spawn` | Adds a subagent node (clearing finished ones if stale) |
 | `turn.step` | Records the real model and effort of each request |

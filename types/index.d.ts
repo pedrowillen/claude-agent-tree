@@ -3,6 +3,7 @@ export type AgentStatus = 'running' | 'done' | 'error' | 'aborted'
 // one node of the tree: the orchestrator or a subagent
 export type AgentNode = {
   id: string
+  parentId?: string // the agent that spawned it; absent for the orchestrator's own
   type: string
   description: string
   model: string

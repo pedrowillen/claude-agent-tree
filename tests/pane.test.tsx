@@ -18,7 +18,7 @@ const pane = (bodyColumns: number) => ({
 
 test('the pane shows a subagent running, then done with its tokens', async ($, on) => {
   // the hooks below stand for the engine
-  on('command.register', () => ({ value: { command: 'agents' } }))
+  on('command.register', () => ({ value: { command: 'agent-tree' } }))
   on('ui.open', () => ({ value: { isPlaced: true } }))
   on('session.start', (_, e) => ({ cwd: e.cwd }))
   on('agent.spawn', () => ({ model: 'claude-haiku-5-5', agentId: 'a1' }))
@@ -66,7 +66,7 @@ const webLine = async ($: Engine, cols: number, text = /Web/) => {
 
 test('the server reports a busy port, then the tree reaches the next one', async ($, on) => {
   const posts: string[] = []
-  on('command.register', () => ({ value: { command: 'agents' } }))
+  on('command.register', () => ({ value: { command: 'agent-tree' } }))
   on('ui.open', () => ({ value: { isPlaced: true } }))
   on('session.start', (_, e) => ({ cwd: e.cwd }))
   on('http.fetch', (_, e) => {
@@ -94,7 +94,7 @@ test('the page line names the ports in use, joined on a wide pane, apart on a na
 
 test('the pane says when every port is in use, or node is missing', async ($, on) => {
   let isNodeMissing = false
-  on('command.register', () => ({ value: { command: 'agents' } }))
+  on('command.register', () => ({ value: { command: 'agent-tree' } }))
   on('ui.open', () => ({ value: { isPlaced: true } }))
   on('session.start', (_, e) => ({ cwd: e.cwd }))
   on('process.spawn', async function* () {

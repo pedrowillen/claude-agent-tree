@@ -1,7 +1,11 @@
+import { atom, read } from 'claude-code'
 import type { Register } from 'claude-code'
 
-import { PANE } from './state'
+import { INITIAL_WEB, PANE } from './state'
 import { serve } from './web/serve'
+import { openWindow } from './web/window'
+
+const web = atom({ plugin: 'agent-tree', key: 'web' } as const, INITIAL_WEB)
 
 // the session's start (pane, server, command) and the command that reopens the pane
 export const registerSession: Register = on => {
@@ -16,7 +20,9 @@ export const registerSession: Register = on => {
 
   on('command.run', { command: 'agent-tree' }, async $ => {
     await $.ui.open({ id: PANE, title: 'Agents' })
+    const { port } = await read($, web)
+    void openWindow($, port)
 
-    return { text: 'Agents pane opened.' }
+    return { text: 'Agents pane and window opened.' }
   })
 }

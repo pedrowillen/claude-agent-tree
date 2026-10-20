@@ -57,6 +57,8 @@ The same tree is served as a live web page at **http://127.0.0.1:47821**. The mo
 Web: http://127.0.0.1:47822 (47821 in use)
 ```
 
+When the server starts, the page also opens as its own window through Edge's app mode (`msedge --app=...`: no tabs, no address bar). Running `/agent-tree` opens the pane and the window again. This needs Edge, which comes with Windows 11; without it nothing opens and the pane and the page work as before.
+
 If every port is taken the line reads `Web: ports 47821-47830 in use`; without Node on the `PATH` it reads `Web: node not found`. The pane works the same either way. Each session gets its own server, so a second session takes the next free port.
 
 The page is plain HTML, CSS and JavaScript, follows the system's light or dark theme and updates through server-sent events. The server listens on `127.0.0.1` only and refuses requests whose `Host` is not `127.0.0.1` or `localhost`.
@@ -92,6 +94,7 @@ src/pane.tsx                 draws the terminal pane
 src/state.ts                 shared constants and initial values
 src/format.ts                number and text formatters
 src/web/serve.ts             runs the page's server and pushes the tree to it
+src/web/window.ts            opens the page as an Edge app window
 src/web/server.ts            the Node server's source and its ports
 src/web/page.ts              the web page (HTML, CSS, JS) as a string
 types/index.d.ts             type contract of the state (AgentNode, Tree, Web)

@@ -1,6 +1,6 @@
 {
   "name": "agent-tree",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Live pane with the tree of the orchestrator and its subagents: model, effort, tokens, tools and duration",
   "types": "./types/index.d.ts"
 }

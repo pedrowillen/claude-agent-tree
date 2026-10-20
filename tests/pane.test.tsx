@@ -1,3 +1,5 @@
+import type { Engine } from 'claude-code'
+import { webLines } from '../hooks/register'
 import { expect, test } from 'claude-code/testing'
 
 const pane = (bodyColumns: number) => ({
@@ -22,6 +24,7 @@ test('the pane shows a subagent running, then done with its tokens', async ($, o
   on('agent.spawn', () => ({ model: 'claude-haiku-5-5', agentId: 'a1' }))
   on('tool.call', () => ({ result: {} }))
   on('turn.complete', (_, e) => ({ text: e.answer }))
+  on('process.spawn', async function* () { return { value: { code: 1, signal: null } } })
 
   await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
   await $.agent.spawn({
@@ -52,4 +55,58 @@ test('the pane shows a subagent running, then done with its tokens', async ($, o
   expect((await narrow.find({ type: 'Text', text: /tool/ }))?.text).toBe('     1 tool · 3.9s')
   expect((await narrow.find({ type: 'Text', text: /6.0k cache/ }))?.text).toBe("     7.3k in (6.0k cache) / 2…")
   await narrow.unmount()
+})
+
+const webLine = async ($: Engine, cols: number, text = /Web/) => {
+  const ui = await $.ui.mount({ ...pane(cols), surface: 'desktop' })
+  const line = (await ui.find({ type: 'Text', text }))?.text
+  await ui.unmount()
+  return line
+}
+
+test('the server reports a busy port, then the tree reaches the next one', async ($, on) => {
+  const posts: string[] = []
+  on('command.register', () => ({ value: { command: 'agents' } }))
+  on('ui.open', () => ({ value: { isPlaced: true } }))
+  on('session.start', (_, e) => ({ cwd: e.cwd }))
+  on('http.fetch', (_, e) => {
+    posts.push(e.url)
+    return { value: { status: 200, ok: true, headers: {}, text: '' } }
+  })
+  // the first port in use, the next one listening (a line split in two pieces), then it exits
+  on('process.spawn', async function* () {
+    yield { stream: 'stdout' as const, text: 'BUSY 47821\nLIS' }
+    yield { stream: 'stdout' as const, text: 'TEN 47822\n' }
+    return { value: { code: 0, signal: null } }
+  })
+
+  await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
+  expect(await webLine($, 100)).toBe('Web: server stopped')
+  expect(posts).toEqual(['http://127.0.0.1:47822/state'])
+})
+
+test('the page line names the ports in use, joined on a wide pane, apart on a narrow one', () => {
+  const web = { status: 'listening' as const, port: 47822, error: '' }
+  expect(webLines({ ...web, busy: [] }, false)).toEqual(['Web: http://127.0.0.1:47822'])
+  expect(webLines({ ...web, busy: [47821] }, false)).toEqual(['Web: http://127.0.0.1:47822 (47821 in use)'])
+  expect(webLines({ ...web, busy: [47821] }, true)).toEqual(['Web: http://127.0.0.1:47822', '  47821 in use'])
+})
+
+test('the pane says when every port is in use, or node is missing', async ($, on) => {
+  let isNodeMissing = false
+  on('command.register', () => ({ value: { command: 'agents' } }))
+  on('ui.open', () => ({ value: { isPlaced: true } }))
+  on('session.start', (_, e) => ({ cwd: e.cwd }))
+  on('process.spawn', async function* () {
+    if (isNodeMissing) throw new Error('ENOENT')
+    yield { stream: 'stdout' as const, text: 'BUSY 47829\nBUSY 47830\nFAILED 47830 EADDRINUSE\n' }
+    return { value: { code: 1, signal: null } }
+  })
+
+  await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
+  expect(await webLine($, 100)).toBe('Web: ports 47821-47830 in use')
+
+  isNodeMissing = true
+  await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
+  expect(await webLine($, 100)).toBe('Web: node not found')
 })

@@ -1,7 +1,9 @@
 import { atom, read, update } from 'claude-code'
-import type { Register, TurnUsage } from 'claude-code'
+import type { EngineInterface, Register, TurnUsage } from 'claude-code'
 
-import type { AgentNode, AgentStatus, Tree } from '../types'
+import type { AgentNode, AgentStatus, Tree, Web } from '../types'
+import { PAGE } from '../web/page'
+import { FIRST_PORT, PORT_TRIES, serverSource } from '../web/server'
 
 const PANE = 'agent-tree'
 const MAX_AGENTS = 20
@@ -17,6 +19,63 @@ const tree = atom({ plugin: 'agent-tree', key: 'tree' } as const, {
   agents: [],
   isStale: false,
 } as Tree)
+
+const web = atom({ plugin: 'agent-tree', key: 'web' } as const, {
+  status: 'starting', port: 0, busy: [], error: '',
+} as Web)
+
+// sends the tree to the local page, when its server listens
+const push = async ($: EngineInterface) => {
+  const w = await read($, web)
+  if (w.status !== 'listening') return
+  const body = JSON.stringify(await read($, tree))
+  await $.http.fetch(`http://127.0.0.1:${w.port}/state`, { method: 'POST', body }).catch(() => undefined)
+}
+
+const save = async ($: EngineInterface, fn: (t: Tree) => Tree) => {
+  await update($, tree, fn)
+  void push($)
+}
+
+// runs the page's server for the module's life, reading the lines it prints
+const serve = async ($: EngineInterface) => {
+  await update($, web, () => ({ status: 'starting', port: 0, busy: [], error: '' }))
+  try {
+    let rest = ''
+    for await (const { stream, text } of $.process.spawn({ argv: ['node', '-'], input: serverSource(PAGE) })) {
+      if (stream !== 'stdout') continue
+      const lines = (rest + text).split('\n')
+      rest = lines.pop() ?? ''
+      for (const line of lines) {
+        const [word = '', port = '', code = ''] = line.trim().split(' ')
+        if (word === 'BUSY') await update($, web, w => ({ ...w, busy: [...w.busy, Number(port)] }))
+        if (word === 'FAILED') await update($, web, w => ({ ...w, status: 'failed', error: code }))
+        if (word === 'LISTEN') {
+          await update($, web, w => ({ ...w, status: 'listening', port: Number(port) }))
+          await push($)
+        }
+      }
+    }
+    await update($, web, w => (w.status === 'failed' ? w : { ...w, status: 'failed', error: 'server stopped' }))
+  } catch {
+    await update($, web, w => ({ ...w, status: 'failed', error: 'node not found' })).catch(() => undefined)
+  }
+}
+
+const LAST_PORT = FIRST_PORT + PORT_TRIES - 1
+
+// the pane's lines about the page: its address, or why there is none
+export const webLines = (w: Web, isNarrow: boolean): string[] => {
+  if (w.status === 'starting') return ['Web: starting…']
+  if (w.status === 'failed') {
+    return [w.error === 'EADDRINUSE' ? `Web: ports ${FIRST_PORT}-${LAST_PORT} in use` : `Web: ${w.error}`]
+  }
+  const url = `Web: http://127.0.0.1:${w.port}`
+  if (w.busy.length === 0) return [url]
+  const note = `${w.busy.join(', ')} in use`
+
+  return isNarrow ? [url, `  ${note}`] : [`${url} (${note})`]
+}
 
 // applies fn to the node of the loop (a subagent by id, or the main one)
 const patch = (t: Tree, agentId: string | undefined, fn: (n: AgentNode) => AgentNode): Tree =>
@@ -55,6 +114,7 @@ export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     await $.command.register({ name: 'agents', description: 'Open the pane with the agent tree' })
     void $.ui.open({ id: PANE, title: 'Agents' })
+    void serve($)
 
     return next(e)
   })
@@ -77,7 +137,7 @@ export const register: Register = on => {
     if (spawned.agentId === undefined) return spawned
 
     const added = node(spawned.agentId, e.subagentType, e.description, spawned.model)
-    await update($, tree, t => {
+    await save($, t => {
       const kept = t.isStale ? t.agents.filter(a => a.status === 'running') : t.agents
 
       return { ...t, isStale: false, agents: [...kept, added].slice(-MAX_AGENTS) }
@@ -88,20 +148,20 @@ export const register: Register = on => {
 
   // the real model and effort of each request
   on('turn.step', async function* ($, e, next) {
-    await update($, tree, t => patch(t, e.agentId, n => ({ ...n, model: e.model, effort: e.effort?.toString() })))
+    await save($, t => patch(t, e.agentId, n => ({ ...n, model: e.model, effort: e.effort?.toString() })))
 
     return yield* next(e)
   })
 
   on('tool.call', async ($, e, next) => {
-    if (e.agentId !== undefined) await update($, tree, t => patch(t, e.agentId, n => ({ ...n, tools: n.tools + 1 })))
+    if (e.agentId !== undefined) await save($, t => patch(t, e.agentId, n => ({ ...n, tools: n.tools + 1 })))
 
     return next(e)
   })
 
   on('turn.complete', async ($, e, next) => {
     const done = await next(e)
-    await update($, tree, t => patch(t, e.agentId, n => {
+    await save($, t => patch(t, e.agentId, n => {
       const used = addUsage(n, e.usage)
       if (e.agentId === undefined) return used
 
@@ -119,6 +179,7 @@ export const register: Register = on => {
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
     const { Box, Text } = $.ui.resolve(e)
     const { main, agents } = await read($, tree)
+    const w = await read($, web)
     const cols = e.props.bodyColumns
     const isNarrow = cols < NARROW
     // cuts a line to the pane width, so it never wraps
@@ -146,6 +207,9 @@ export const register: Register = on => {
           )
         })}
         {agents.length > 0 && <Text mono dimColor>{fit(`Subagents: ${k(sumIn)} in / ${k(sumOut)} out`)}</Text>}
+        {webLines(w, isNarrow).map(line => (
+          <Text mono dimColor={w.status !== 'failed'} color={w.status === 'failed' ? 'warning' : undefined}>{fit(line)}</Text>
+        ))}
       </Box>
     )
   })

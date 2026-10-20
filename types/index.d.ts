@@ -22,8 +22,16 @@ export type Tree = {
   isStale: boolean // a new user prompt: the next spawn clears the finished agents
 }
 
+// the local page's server: where it listens, and the ports it found in use
+export type Web = {
+  status: 'starting' | 'listening' | 'failed'
+  port: number
+  busy: number[]
+  error: string
+}
+
 declare module 'claude-code' {
   interface PluginState {
-    'agent-tree': { tree: Tree }
+    'agent-tree': { tree: Tree; web: Web }
   }
 }

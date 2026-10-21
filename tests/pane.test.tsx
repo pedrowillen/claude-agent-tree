@@ -4,6 +4,7 @@ import { optionsFor, parseChoice } from '../src/choice'
 import { contextText, costText, callLabel, usd } from '../src/format'
 import { costOf, rate, windowOf } from '../src/pricing'
 import { node } from '../src/state'
+import { PAGE } from '../src/web/page'
 import { expect, test } from 'claude-code/testing'
 
 const pane = (bodyColumns: number) => ({
@@ -193,6 +194,37 @@ test('a subagent keeps its calls and answer, and its end is announced', async ($
     'Agent aborted · reader-low: Stop',
   ])
   expect(notes).toEqual(['reader-low: Fail']) // an abort is the user's own doing: no system notification
+  stop()
+})
+
+test('the main session keeps its last 50 tool calls and its web card can open', async ($, on) => {
+  const bodies: string[] = []
+  let stop = () => {}
+  on('command.register', () => ({ value: { command: 'agent-tree' } }))
+  on('ui.open', () => ({ value: { isPlaced: true } }))
+  on('session.start', (_, e) => ({ cwd: e.cwd }))
+  on('tool.call', () => ({ result: {} }))
+  on('http.fetch', (_, e) => {
+    bodies.push(String(e.init?.body))
+    return { value: { status: 200, ok: true, headers: {}, text: '' } }
+  })
+  on('process.spawn', async function* () {
+    yield { stream: 'stdout' as const, text: 'LISTEN 47821 k3y\n' }
+    await new Promise<void>(resolve => { stop = resolve })
+    return { value: { code: 0, signal: null } }
+  })
+
+  await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
+  for (let i = 0; i < 60; i++) await $.tool.call({ tool: 'Read', file_path: `f${i}` })
+  await new Promise(resolve => setTimeout(resolve, 400)) // the last send waits its gap
+
+  const state = JSON.parse(bodies.at(-1) ?? 'null')
+  expect(state.main.tools).toBe(60)
+  expect(state.main.calls).toHaveLength(50)
+  expect([state.main.calls[0], state.main.calls[49]]).toEqual(['Read: f10', 'Read: f59'])
+  // The page used to explicitly exclude the main card even when it had tool calls.
+  expect(PAGE.includes('if (calls.length > 0 || n.answer)')).toBe(true)
+  expect(PAGE.includes('if (!isMain && (calls.length > 0 || n.answer))')).toBe(false)
   stop()
 })
 

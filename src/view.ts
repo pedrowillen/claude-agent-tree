@@ -2,6 +2,7 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface } from 'claude-code'
 
 import { optionsFor, parseChoice, QUESTION } from './choice'
+import { pageUrl } from './format'
 import { INITIAL_VIEW, INITIAL_WEB, PANE } from './state'
 import { openWindow } from './web/window'
 
@@ -23,12 +24,12 @@ export async function reveal($: EngineInterface) {
   if (!v.chosen || v.isShown || w.status !== 'listening') return
 
   await update($, view, x => ({ ...x, isShown: true }))
-  const url = `http://127.0.0.1:${w.port}`
+  const url = pageUrl(w.port, w.token)
   if (v.web) {
     $.ui.toast(`Agent Tree: ${url}`)
     $.ui.status(`Agent Tree: ${url}`)
   }
-  if (v.window) await openWindow($, w.port)
+  if (v.window) await openWindow($, url)
 }
 
 // asks how to see the agents, in the engine's own question dialog, and applies the answer

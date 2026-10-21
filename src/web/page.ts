@@ -11,12 +11,12 @@ export const PAGE = `<!doctype html>
 <style>
   :root {
     --bg: #f6f7f9; --card: #fff; --text: #1d2330; --dim: #6b7280; --line: #d9dde3;
-    --run: #2563eb; --ok: #16a34a; --err: #dc2626; --abort: #a16207;
+    --run: #2563eb; --ok: #16a34a; --err: #dc2626; --abort: #a16207; --good: #65a30d; --poor: #ea580c;
   }
   @media (prefers-color-scheme: dark) {
     :root {
       --bg: #0f1218; --card: #171b23; --text: #e6e8ec; --dim: #8b93a1; --line: #2a303b;
-      --run: #60a5fa; --ok: #4ade80; --err: #f87171; --abort: #facc15;
+      --run: #60a5fa; --ok: #4ade80; --err: #f87171; --abort: #facc15; --good: #a3e635; --poor: #fb923c;
     }
   }
   * { box-sizing: border-box; }
@@ -50,14 +50,40 @@ export const PAGE = `<!doctype html>
     animation: flow 1.2s linear infinite; }
   @keyframes flow { to { stroke-dashoffset: -18.1; } }
   @media (prefers-reduced-motion: reduce) { .wires path.flow { animation: none; stroke-dasharray: none; opacity: .6; } }
+  .card.click { cursor: pointer; }
+  .card.click:hover { border-color: var(--run); }
+  .chev { margin-left: auto; color: var(--dim); }
+  .node.open { width: 340px; }
+  .detail { margin-top: 8px; padding-top: 6px; border-top: 1px solid var(--line); cursor: auto; }
+  .dh { margin-top: 4px; color: var(--dim); font-size: 11px; text-transform: uppercase; letter-spacing: .04em; }
+  .calls { max-height: 160px; overflow: auto; font-size: 12px; }
+  .call { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .answer { margin: 4px 0 0; max-height: 220px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere;
+    font: inherit; font-size: 12px; }
+  .card.click:focus-visible { outline: 2px solid var(--run); outline-offset: 2px; }
+  /* --flash-delay (negative) resumes a flash that a redraw interrupted, where it left off */
+  .flash-done .card { animation: flash-done 1.4s ease-out var(--flash-delay, 0ms); }
+  .flash-error .card { animation: flash-error 1.4s ease-out var(--flash-delay, 0ms); }
+  .flash-aborted .card { animation: flash-aborted 1.4s ease-out var(--flash-delay, 0ms); }
+  @keyframes flash-done { from { box-shadow: 0 0 0 4px var(--ok); } to { box-shadow: 0 0 0 0 transparent; } }
+  @keyframes flash-error { from { box-shadow: 0 0 0 4px var(--err); } to { box-shadow: 0 0 0 0 transparent; } }
+  @keyframes flash-aborted { from { box-shadow: 0 0 0 4px var(--abort); } to { box-shadow: 0 0 0 0 transparent; } }
   .pill { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em;
     padding: 1px 8px; border-radius: 999px; color: var(--card); }
+  .rate { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em;
+    padding: 0 7px; border-radius: 999px; color: var(--card); cursor: help; }
+  .rate-perfect { background: var(--ok); }
+  .rate-ok { background: var(--good); }
+  .rate-fair { background: var(--abort); }
+  .rate-poor { background: var(--poor); }
+  .rate-awful { background: var(--err); }
   .running { background: var(--run); animation: pulse 1.4s ease-in-out infinite; }
   .done { background: var(--ok); }
   .error { background: var(--err); }
   .aborted { background: var(--abort); }
   @keyframes pulse { 50% { opacity: .55; } }
-  .summary { margin-top: 6px; color: var(--dim); font-style: italic; overflow-wrap: anywhere; }
+  .summary { margin-top: 6px; color: var(--dim); font-style: italic; overflow-wrap: anywhere;
+    display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
   .empty { color: var(--dim); margin-top: 12px; }
   footer { margin-top: 20px; color: var(--dim); font-size: 13px; }
 </style>
@@ -70,7 +96,7 @@ export const PAGE = `<!doctype html>
 </main>
 <script>
   const LABEL = { running: 'running', done: 'ok', error: 'error', aborted: 'aborted' };
-  const k = n => n >= 1000 ? (n / 1000).toFixed(1) + 'k' : String(n);
+  const k = n => n >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : n >= 1000 ? (n / 1000).toFixed(1) + 'k' : String(n);
   const secs = ms => (ms / 1000).toFixed(1) + 's';
   const short = m => (m || '?').replace(/^claude-/, '');
   const tokens = n => k(n.tokensIn) + ' in (' + k(n.cacheRead) + ' cache) / ' + k(n.tokensOut) + ' out';
@@ -80,6 +106,14 @@ export const PAGE = `<!doctype html>
     if (text !== undefined) e.textContent = text;
     return e;
   };
+
+  const usd = c => '$' + (c < 0.00995 ? c.toFixed(4) : c < 0.9995 ? c.toFixed(3) : c.toFixed(2));
+  const RATES = new Set(['perfect', 'ok', 'fair', 'poor', 'awful']);
+  const open = new Set(); // ids of the cards opened
+  const seen = new Map(); // id -> last status, to flash a card when its agent finishes
+  const flashing = new Map(); // id -> { cls, until }: a flash lives through the redraws that follow
+  const FLASH_MS = 1400;
+  let last = null;
 
   const card = (n, isMain) => {
     const c = el('div', 'card');
@@ -92,7 +126,60 @@ export const PAGE = `<!doctype html>
     const tools = n.tools + ' tool' + (n.tools === 1 ? '' : 's');
     const usage = isMain ? tokens(n) : n.status === 'running' ? tools : [tokens(n), tools, secs(n.durationMs)].join(' · ');
     c.append(el('div', 'meta mono', usage));
-    if (n.summary) c.append(el('div', 'summary', n.summary));
+
+    // what it cost (estimated, with a verdict once a subagent ends) and how full its context is
+    const spend = el('div', 'meta mono');
+    if (n.costUsd !== undefined) {
+      spend.append('~' + usd(n.costUsd) + (n.isCostPartial ? '+' : ''));
+      if (!isMain && RATES.has(n.rating)) {
+        const chip = el('span', 'rate rate-' + n.rating, n.rating);
+        chip.title = 'Estimated cost of this agent run, judged against fixed ceilings (see the README)';
+        spend.append(' ', chip);
+      }
+    }
+    if (n.contextTokens) spend.append((spend.childNodes.length ? ' · ' : '') + 'ctx ' + k(n.contextTokens)
+      + (n.contextWindow ? ' / ' + k(n.contextWindow) + ' (' + Math.max(1, Math.round(n.contextTokens / n.contextWindow * 100)) + '%)' : ''));
+    if (spend.childNodes.length) c.append(spend);
+    if (n.summary && !open.has(n.id)) c.append(el('div', 'summary', n.summary));
+
+    // an agent with something to show opens on a click: its tool calls and its whole answer
+    const calls = n.calls || [];
+    if (!isMain && (calls.length > 0 || n.answer)) {
+      c.classList.add('click');
+      c.dataset.card = n.id;
+      c.tabIndex = 0;
+      c.setAttribute('role', 'button');
+      c.setAttribute('aria-expanded', String(open.has(n.id)));
+      top.append(el('span', 'chev', open.has(n.id) ? '▾' : '▸'));
+      const toggle = () => {
+        if (open.has(n.id)) open.delete(n.id); else open.add(n.id);
+        if (last) draw(last);
+      };
+      c.addEventListener('click', () => { if (!String(window.getSelection())) toggle(); });
+      c.addEventListener('keydown', e => {
+        if (e.target !== c || (e.key !== 'Enter' && e.key !== ' ')) return;
+        e.preventDefault();
+        toggle();
+      });
+      if (open.has(n.id)) {
+        const box = el('div', 'detail');
+        box.addEventListener('click', e => e.stopPropagation());
+        if (calls.length > 0) {
+          box.append(el('div', 'dh', 'Tools (' + n.tools + (n.tools > calls.length ? ', last ' + calls.length : '') + ')'));
+          const list = el('div', 'calls');
+          list.dataset.keep = n.id + ':calls';
+          for (const call of calls) { const row = el('div', 'call', call); row.title = call; list.append(row); }
+          box.append(list);
+        }
+        if (n.answer) {
+          box.append(el('div', 'dh', 'Answer'));
+          const pre = el('pre', 'answer', n.answer);
+          pre.dataset.keep = n.id + ':answer';
+          box.append(pre);
+        }
+        c.append(box);
+      }
+    }
     return c;
   };
 
@@ -132,7 +219,14 @@ export const PAGE = `<!doctype html>
   };
 
   const draw = t => {
+    last = t;
     const root = document.getElementById('root');
+    // a redraw rebuilds the page, so remember where the user had scrolled
+    const before = root.querySelector('.scroll');
+    const left = before ? before.scrollLeft : null;
+    const tops = {};
+    for (const box of root.querySelectorAll('[data-keep]')) tops[box.dataset.keep] = box.scrollTop;
+    const focused = document.activeElement && document.activeElement.dataset ? document.activeElement.dataset.card : undefined;
     const foot = document.getElementById('foot');
     root.className = '';
 
@@ -162,7 +256,19 @@ export const PAGE = `<!doctype html>
     for (const row of levels) {
       const level = el('div', 'level');
       for (const n of row) {
-        const item = el('div', 'node');
+        const item = el('div', 'node' + (open.has(n.id) ? ' open' : ''));
+        if (n.parent) {
+          const now = Date.now();
+          if (seen.get(n.id) === 'running' && n.status !== 'running') flashing.set(n.id, { cls: 'flash-' + n.status, until: now + FLASH_MS });
+          const flash = flashing.get(n.id);
+          if (flash && flash.until > now) {
+            item.classList.add(flash.cls);
+            item.style.setProperty('--flash-delay', '-' + (FLASH_MS - (flash.until - now)) + 'ms');
+          } else {
+            flashing.delete(n.id);
+          }
+        }
+        seen.set(n.id, n.status);
         item.append(el('div', 'badge' + (n.parent ? ' ' + n.status : ''), String(n.num)));
         item.append(card(n, !n.parent));
         n.el = item;
@@ -178,19 +284,32 @@ export const PAGE = `<!doctype html>
       root.append(el('div', 'empty', 'No subagents this round.'));
       foot.textContent = '';
     }
+    // the first draw centers a wide tree on the main session; later ones keep the scroll
+    scroll.scrollLeft = left === null ? Math.max(0, (scroll.scrollWidth - scroll.clientWidth) / 2) : left;
+    for (const box of root.querySelectorAll('[data-keep]')) if (tops[box.dataset.keep] !== undefined) box.scrollTop = tops[box.dataset.keep];
+    if (focused !== undefined) {
+      const again = root.querySelector('[data-card="' + CSS.escape(focused) + '"]');
+      if (again) again.focus({ preventScroll: true });
+    }
     wire();
     if (t.agents.length === 0) return;
     const sumIn = t.agents.reduce((s, a) => s + a.tokensIn, 0);
     const sumOut = t.agents.reduce((s, a) => s + a.tokensOut, 0);
-    foot.textContent = 'Subagents: ' + k(sumIn) + ' in / ' + k(sumOut) + ' out · updated ' + new Date().toLocaleTimeString();
+    const sumCost = t.agents.reduce((s, a) => s + (a.costUsd || 0), 0);
+    foot.textContent = 'Subagents: ' + k(sumIn) + ' in / ' + k(sumOut) + ' out' + (sumCost > 0 ? ' · ~' + usd(sumCost) : '') + ' · updated ' + new Date().toLocaleTimeString();
   };
 
   window.addEventListener('resize', wire);
   const conn = document.getElementById('conn');
-  const events = new EventSource('/events');
-  events.onopen = () => { conn.textContent = 'live'; conn.classList.add('live'); };
-  events.onerror = () => { conn.textContent = 'reconnecting…'; conn.classList.remove('live'); };
-  events.onmessage = m => { const t = JSON.parse(m.data); if (t) draw(t); };
+  // the server's data needs its key, which is in this page's address (?t=), put there by the mod
+  const key = new URLSearchParams(location.search).get('t');
+  if (!key) conn.textContent = 'open the link shown in the Agents pane';
+  const events = key ? new EventSource('/events?t=' + encodeURIComponent(key)) : null;
+  if (events) {
+    events.onopen = () => { conn.textContent = 'live'; conn.classList.add('live'); };
+    events.onerror = () => { conn.textContent = 'reconnecting…'; conn.classList.remove('live'); };
+    events.onmessage = m => { const t = JSON.parse(m.data); if (t) draw(t); };
+  }
 </script>
 </body>
 </html>

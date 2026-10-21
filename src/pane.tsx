@@ -2,7 +2,7 @@ import { atom, read } from 'claude-code'
 import type { Register } from 'claude-code'
 
 import type { AgentNode, AgentStatus, Web } from '../types'
-import { head, k, secs, tokens } from './format'
+import { contextText, costText, head, k, pageUrl, secs, tokens, usd } from './format'
 import { INITIAL_TREE, INITIAL_WEB } from './state'
 import { FIRST_PORT, PORT_TRIES } from './web/server'
 
@@ -21,7 +21,7 @@ export const webLines = (w: Web, isNarrow: boolean): string[] => {
   if (w.status === 'failed') {
     return [w.error === 'EADDRINUSE' ? `Web: ports ${FIRST_PORT}-${LAST_PORT} in use` : `Web: ${w.error}`]
   }
-  const url = `Web: http://127.0.0.1:${w.port}`
+  const url = `Web: ${pageUrl(w.port, w.token)}`
   if (w.busy.length === 0) return [url]
   const note = `${w.busy.join(', ')} in use`
 
@@ -32,9 +32,10 @@ export const webLines = (w: Web, isNarrow: boolean): string[] => {
 const detailLines = (a: AgentNode, isNarrow: boolean): string[] => {
   const toolCount = `${a.tools} tool${a.tools === 1 ? '' : 's'}`
   const usage = a.status === 'running' ? [toolCount] : [tokens(a), `${toolCount} · ${secs(a.durationMs)}`]
+  const spend = [costText(a), contextText(a)].filter(s => s !== '')
   const lines = isNarrow
-    ? [`[${LABEL[a.status]}] ${a.type}`, head(a), a.description, ...usage]
-    : [`[${LABEL[a.status]}] ${a.type} · ${head(a)}`, [a.description, ...usage].join(' · ')]
+    ? [`[${LABEL[a.status]}] ${a.type}`, head(a), a.description, ...usage, ...spend]
+    : [`[${LABEL[a.status]}] ${a.type} · ${head(a)}`, [a.description, ...usage].join(' · '), ...(spend.length > 0 ? [spend.join(' · ')] : [])]
 
   return a.summary === '' ? lines : [...lines, a.summary]
 }
@@ -51,12 +52,15 @@ export const registerPane: Register = on => {
     const fit = (s: string) => (s.length > cols ? `${s.slice(0, Math.max(1, cols - 1))}…` : s)
     const sumIn = agents.reduce((s, a) => s + a.tokensIn, 0)
     const sumOut = agents.reduce((s, a) => s + a.tokensOut, 0)
+    const sumCost = agents.reduce((s, a) => s + (a.costUsd ?? 0), 0)
+    const mainSpend = [costText(main), contextText(main)].filter(s => s !== '').join(' · ')
 
     return (
       <Box flexDirection="column">
         <Text mono weight="bold">{fit(isNarrow ? 'Main session' : `Main session · ${head(main)}`)}</Text>
         {isNarrow && <Text mono dimColor>{fit(`  ${head(main)}`)}</Text>}
         <Text mono dimColor>{fit(`  ${tokens(main)}`)}</Text>
+        {mainSpend !== '' && <Text mono dimColor>{fit(`  ${mainSpend}`)}</Text>}
         {agents.length === 0 && <Text mono dimColor>{fit('└─ no subagents this round')}</Text>}
         {agents.map((a, i) => {
           const isLast = i === agents.length - 1
@@ -71,7 +75,7 @@ export const registerPane: Register = on => {
             </Box>
           )
         })}
-        {agents.length > 0 && <Text mono dimColor>{fit(`Subagents: ${k(sumIn)} in / ${k(sumOut)} out`)}</Text>}
+        {agents.length > 0 && <Text mono dimColor>{fit(`Subagents: ${k(sumIn)} in / ${k(sumOut)} out${sumCost > 0 ? ` · ~${usd(sumCost)}` : ''}`)}</Text>}
         {webLines(w, isNarrow).map(line => (
           <Text mono dimColor={w.status !== 'failed'} color={w.status === 'failed' ? 'warning' : undefined}>{fit(line)}</Text>
         ))}

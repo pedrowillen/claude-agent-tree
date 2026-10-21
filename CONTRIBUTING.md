@@ -4,7 +4,7 @@ Thanks for wanting to help. Bug reports, ideas, docs and code are all welcome.
 
 ## The short way
 
-1. **Open an issue first** for a bug or a new idea, so we agree on it before you spend time. Small fixes and typos can go straight to a pull request.
+1. **Open an issue first** for a bug or a new idea, so we agree on it before you spend time. Small fixes and typos can go straight to a pull request. For a question or an open-ended idea, use [Discussions](https://github.com/pedrowillen/claude-agent-tree/discussions).
 2. **Fork** the repository and make a branch.
 3. **Run it** from your clone (below) and make your change.
 4. **Check it**: `claude plugin validate .` and `claude plugin test .` must pass. New behavior comes with a test.

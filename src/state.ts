@@ -1,4 +1,4 @@
-import type { AgentNode, Tree, Web } from '../types'
+import type { AgentNode, Tree, View, Web } from '../types'
 
 // The engine's scan reads an atom's reference only where `read`/`update` use it, so each file
 // declares its own `atom({ plugin: 'agent-tree', key }, ...)`; what they share lives here.
@@ -13,3 +13,4 @@ export const node = (id: string, type: string, description: string, model: strin
 
 export const INITIAL_TREE: Tree = { main: node('main', 'Main session', '', ''), agents: [], isStale: false }
 export const INITIAL_WEB: Web = { status: 'starting', port: 0, busy: [], error: '' }
+export const INITIAL_VIEW: View = { chosen: false, pane: false, web: false, window: false, isShown: false }

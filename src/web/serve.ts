@@ -2,9 +2,10 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface } from 'claude-code'
 
 import { INITIAL_TREE, INITIAL_WEB } from '../state'
+import { reveal } from '../view'
+import { ICON } from './icon'
 import { PAGE } from './page'
 import { serverSource } from './server'
-import { openWindow } from './window'
 
 const tree = atom({ plugin: 'agent-tree', key: 'tree' } as const, INITIAL_TREE)
 const web = atom({ plugin: 'agent-tree', key: 'web' } as const, INITIAL_WEB)
@@ -23,7 +24,7 @@ export async function serve($: EngineInterface) {
   await update($, web, () => ({ status: 'starting', port: 0, busy: [], error: '' }))
   try {
     let rest = ''
-    for await (const { stream, text } of $.process.spawn({ argv: ['node', '-'], input: serverSource(PAGE) })) {
+    for await (const { stream, text } of $.process.spawn({ argv: ['node', '-'], input: serverSource(PAGE, ICON) })) {
       if (stream !== 'stdout') continue
       const lines = (rest + text).split('\n')
       rest = lines.pop() ?? ''
@@ -34,7 +35,7 @@ export async function serve($: EngineInterface) {
         if (word === 'LISTEN') {
           await update($, web, w => ({ ...w, status: 'listening', port: Number(port) }))
           await push($)
-          void openWindow($, Number(port))
+          await reveal($)
         }
       }
     }

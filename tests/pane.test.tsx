@@ -1,5 +1,6 @@
 import type { Engine } from 'claude-code'
 import { webLines } from '../hooks/register'
+import { optionsFor, parseChoice } from '../src/choice'
 import { expect, test } from 'claude-code/testing'
 
 const pane = (bodyColumns: number) => ({
@@ -109,4 +110,14 @@ test('the pane says when every port is in use, or node is missing', async ($, on
   isNodeMissing = true
   await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
   expect(await webLine($, 100)).toBe('Web: node not found')
+})
+
+test('the answer picks the views; anything unknown falls back to the pane', () => {
+  const only = (view: { pane?: boolean; web?: boolean; window?: boolean }) => ({ pane: false, web: false, window: false, ...view })
+  expect(parseChoice('Web page')).toEqual(only({ web: true }))
+  expect(parseChoice('Agents pane, Edge window')).toEqual(only({ pane: true, window: true }))
+  expect(parseChoice('something typed under Other')).toEqual(only({ pane: true }))
+  expect(parseChoice('')).toEqual(only({ pane: true }))
+  expect(optionsFor(false)).toEqual(['Agents pane', 'Web page'])
+  expect(optionsFor(true)).toEqual(['Agents pane', 'Web page', 'Edge window'])
 })

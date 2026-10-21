@@ -7,10 +7,11 @@
 export const FIRST_PORT = 47821
 export const PORT_TRIES = 10
 
-export const serverSource = (page: string): string => String.raw`
+export const serverSource = (page: string, icon: string): string => String.raw`
 const http = require('http');
 const FIRST = ${FIRST_PORT}, LAST = ${FIRST_PORT + PORT_TRIES - 1};
 const PAGE = ${JSON.stringify(page)};
+const ICON = ${JSON.stringify(icon)};
 let state = 'null';
 const clients = new Set();
 
@@ -33,6 +34,7 @@ const server = http.createServer((req, res) => {
     req.on('close', () => clients.delete(res));
     return;
   }
+  if (req.url === '/favicon.png') { res.writeHead(200, { 'content-type': 'image/png' }); res.end(Buffer.from(ICON, 'base64')); return; }
   res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
   res.end(PAGE);
 });

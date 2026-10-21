@@ -31,8 +31,17 @@ export type Web = {
   error: string
 }
 
+// how the user wants to see the agents, as chosen when the session starts
+export type View = {
+  chosen: boolean // the question was answered
+  pane: boolean // the Agents pane
+  web: boolean // the local web page
+  window: boolean // the page as an Edge app window (Windows only)
+  isShown: boolean // the web page and window were already announced or opened
+}
+
 declare module 'claude-code' {
   interface PluginState {
-    'agent-tree': { tree: Tree; web: Web }
+    'agent-tree': { tree: Tree; web: Web; view: View }
   }
 }

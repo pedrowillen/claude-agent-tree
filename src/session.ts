@@ -1,28 +1,22 @@
-import { atom, read } from 'claude-code'
 import type { Register } from 'claude-code'
 
-import { INITIAL_WEB, PANE } from './state'
+import { choose } from './view'
 import { serve } from './web/serve'
-import { openWindow } from './web/window'
 
-const web = atom({ plugin: 'agent-tree', key: 'web' } as const, INITIAL_WEB)
-
-// the session's start (pane, server, command) and the command that reopens the pane
+// the session's start (server, question, command) and the command that asks again
 export const registerSession: Register = on => {
   on('session.start', async ($, e, next) => {
     // the server lives as long as the session: its child ends with the module
     void serve($)
-    void $.ui.open({ id: PANE, title: 'Agents' })
-    await $.command.register({ name: 'agent-tree', description: 'Open the pane with the agent tree' })
+    void choose($)
+    await $.command.register({ name: 'agent-tree', description: 'Choose how to see the agent tree' })
 
     return next(e)
   })
 
   on('command.run', { command: 'agent-tree' }, async $ => {
-    await $.ui.open({ id: PANE, title: 'Agents' })
-    const { port } = await read($, web)
-    void openWindow($, port)
+    void choose($)
 
-    return { text: 'Agents pane and window opened.' }
+    return { text: 'Choose how to see the agents.' }
   })
 }

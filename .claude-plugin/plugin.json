@@ -1,6 +1,7 @@
 {
   "name": "agent-tree",
-  "version": "0.5.0"
+  "version": "0.5.0",
+  "license": "MIT",
   "description": "Live pane with the tree of the orchestrator and its subagents: model, effort, tokens, tools and duration",
   "types": "./types/index.d.ts"
 }

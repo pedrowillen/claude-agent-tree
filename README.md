@@ -33,7 +33,7 @@ Subagents: 12.4k in / 0.6k out
 
 3. Quit the Claude desktop app completely and open it again, so new sessions see the variable.
 
-4. Start a session in the **Code** tab. The **Agents** pane opens on its own; if you close it, run `/agent-tree` to bring it back.
+4. Start a session in the **Code** tab. A question asks how you want to see the agents: the **Agents** pane, the **web page**, the **Edge window** (Windows 11 only), or any mix. Run `/agent-tree` to choose again.
 
 From the terminal CLI, you can load it for a single session instead:
 
@@ -51,13 +51,13 @@ claude --plugin-dir C:\projects\claude-agent-tree
 
 ### The web page
 
-The same tree is served as a live web page at **http://127.0.0.1:47821**. The mod starts a small Node server when the session starts and stops it with the session. If the port is in use it tries the next one, up to 47830, and the pane's last line says which address it took:
+The same tree is served as a live web page at **http://127.0.0.1:47821**, in a monospaced font. Agents sit on one row per level, joined by wires; the wire of an agent that is working has dots running down it, from parent to child (they stop with `prefers-reduced-motion`). The mod starts a small Node server when the session starts and stops it with the session. If the port is in use it tries the next one, up to 47830, and the pane's last line says which address it took:
 
 ```
 Web: http://127.0.0.1:47822 (47821 in use)
 ```
 
-When the server starts, the page also opens as its own window through Edge's app mode (`msedge --app=...`: no tabs, no address bar). Running `/agent-tree` opens the pane and the window again. This needs Edge, which comes with Windows 11; without it nothing opens and the pane and the page work as before.
+The server always runs; what you pick decides what is shown. **Web page** shows the address as a toast and in the status line. **Edge window** opens the page as its own window through Edge's app mode (`msedge --app=...`: no tabs, no address bar, with the Agent Tree icon in the title bar and the taskbar); it needs Edge, which comes with Windows 11, so the option is offered on Windows only. If you dismiss the question or type something else, the pane opens.
 
 If every port is taken the line reads `Web: ports 47821-47830 in use`; without Node on the `PATH` it reads `Web: node not found`. The pane works the same either way. Each session gets its own server, so a second session takes the next free port.
 
@@ -69,8 +69,8 @@ A mod is a Claude Code plugin whose hooks module runs inside the app. `agent-tre
 
 | Event | What the mod does |
 | --- | --- |
-| `session.start` | Starts the page's server (kept up until the session ends), opens the pane and registers `/agent-tree` |
-| `command.run` (`agent-tree`) | Opens the pane again |
+| `session.start` | Starts the page's server (kept up until the session ends), asks how to see the agents and registers `/agent-tree` |
+| `command.run` (`agent-tree`) | Asks again |
 | `turn.start` | On a new user prompt, marks the tree as stale |
 | `agent.spawn` | Adds a subagent node (clearing finished ones if stale) |
 | `turn.step` | Records the real model and effort of each request |
@@ -88,13 +88,16 @@ The page's server runs through `$.process.spawn` (`node -`, its source on stdin)
 .claude-plugin/plugin.json   manifest (name, version, description, types)
 hooks/hooks.json             points the engine at the hooks module
 hooks/register.tsx           entry: composes the three features below
-src/session.ts               session start (server, pane, command) and the command that reopens the pane
+src/session.ts               session start (server, question, command) and the command that asks again
+src/view.ts                  asks how to see the agents and shows the page the way the user chose
+src/choice.ts                the question's options and how its answer is read
 src/tree.ts                  keeps the tree of agents up to date from the loop's events
 src/pane.tsx                 draws the terminal pane
 src/state.ts                 shared constants and initial values
 src/format.ts                number and text formatters
 src/web/serve.ts             runs the page's server and pushes the tree to it
 src/web/window.ts            opens the page as an Edge app window
+src/web/icon.ts              the page's icon (PNG, base64)
 src/web/server.ts            the Node server's source and its ports
 src/web/page.ts              the web page (HTML, CSS, JS) as a string
 types/index.d.ts             type contract of the state (AgentNode, Tree, Web)
@@ -121,3 +124,7 @@ tsc -p .
 ```
 
 `tsc` needs `.claude-plugin/types/`, which exists once the mod has been loaded at least once. While the folder is loaded through `CLAUDE_CODE_PLUGIN_DIRS` or `--plugin-dir`, edits reload the mod at the end of the turn.
+
+## License
+
+[MIT](LICENSE)

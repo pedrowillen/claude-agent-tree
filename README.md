@@ -4,6 +4,10 @@ A Claude Code mod that opens an **Agents** pane beside the chat with a live tree
 
 It costs no model tokens: the hooks run inside the app and the pane is drawn by the interface, so nothing is added to the prompt.
 
+![The web page: the orchestrator on top, its subagents by level, joined by wires](docs/screenshot.png)
+
+The same tree as a web page (sample data). The dots on a wire run from parent to child while that agent is working.
+
 ```
 Main session · opus-5-5 · high
   48.2k in (41.0k cache) / 1.3k out

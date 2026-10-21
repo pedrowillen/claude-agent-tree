@@ -142,6 +142,10 @@ tsc -p .
 
 `tsc` needs `.claude-plugin/types/`, which exists once the mod has been loaded at least once. While the folder is loaded through `CLAUDE_CODE_PLUGIN_DIRS` or `--plugin-dir`, edits reload the mod at the end of the turn.
 
+## Contributing
+
+Issues and pull requests are welcome: see [CONTRIBUTING.md](CONTRIBUTING.md) for how to run your clone, what to check and the commit style.
+
 ## License
 
 [MIT](LICENSE)

@@ -7,6 +7,7 @@ export const PAGE = `<!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Agent Tree</title>
+<link rel="icon" type="image/png" href="/favicon.png">
 <style>
   :root {
     --bg: #f6f7f9; --card: #fff; --text: #1d2330; --dim: #6b7280; --line: #d9dde3;
@@ -19,7 +20,8 @@ export const PAGE = `<!doctype html>
     }
   }
   * { box-sizing: border-box; }
-  body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.5 system-ui, sans-serif; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+    font: 13px/1.55 ui-monospace, "Cascadia Mono", "Cascadia Code", "JetBrains Mono", Consolas, "SFMono-Regular", Menlo, monospace; }
   main { max-width: 1200px; margin: 0 auto; padding: 24px 16px 48px; }
   header { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 20px; }
   h1 { font-size: 20px; margin: 0; }
@@ -30,7 +32,8 @@ export const PAGE = `<!doctype html>
   .row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
   .name { font-weight: 600; }
   .meta { color: var(--dim); font-size: 13px; }
-  .mono { font-family: ui-monospace, Consolas, monospace; font-size: 12.5px; }
+  .mono { font-size: 12px; }
+  .card { overflow-wrap: anywhere; }
   .scroll { overflow-x: auto; padding-bottom: 8px; }
   .tree { position: relative; width: max-content; min-width: 100%; }
   .level { display: flex; justify-content: center; gap: 28px; margin-top: 64px; }
@@ -42,6 +45,11 @@ export const PAGE = `<!doctype html>
   .node .card { width: 100%; padding-top: 18px; }
   .wires { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; }
   .wires path { fill: none; stroke: var(--line); stroke-width: 3; stroke-linecap: round; }
+  /* data flowing down the wire of an agent that is working: dots that travel from parent to child */
+  .wires path.flow { stroke: var(--run); stroke-width: 5; stroke-dasharray: 0.1 18; filter: drop-shadow(0 0 3px var(--run));
+    animation: flow 1.2s linear infinite; }
+  @keyframes flow { to { stroke-dashoffset: -18.1; } }
+  @media (prefers-reduced-motion: reduce) { .wires path.flow { animation: none; stroke-dasharray: none; opacity: .6; } }
   .pill { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em;
     padding: 1px 8px; border-radius: 999px; color: var(--card); }
   .running { background: var(--run); animation: pulse 1.4s ease-in-out infinite; }
@@ -100,15 +108,25 @@ export const PAGE = `<!doctype html>
     const svg = document.createElementNS(SVG, 'svg');
     svg.setAttribute('class', 'wires');
     const box = treeEl.getBoundingClientRect();
-    for (const [from, to] of edges) {
+    // the dots keep one phase across redraws, so an update does not restart them
+    const phase = '-' + (Date.now() % 1200) + 'ms';
+    for (const [from, to, status] of edges) {
       const a = from.getBoundingClientRect();
       const b = to.getBoundingClientRect();
       const x1 = a.left + a.width / 2 - box.left, y1 = a.bottom - box.top;
       const x2 = b.left + b.width / 2 - box.left, y2 = b.top - box.top;
       const mid = (y1 + y2) / 2;
+      const d = 'M' + x1 + ' ' + y1 + ' C' + x1 + ' ' + mid + ' ' + x2 + ' ' + mid + ' ' + x2 + ' ' + y2;
       const p = document.createElementNS(SVG, 'path');
-      p.setAttribute('d', 'M' + x1 + ' ' + y1 + ' C' + x1 + ' ' + mid + ' ' + x2 + ' ' + mid + ' ' + x2 + ' ' + y2);
+      p.setAttribute('d', d);
       svg.append(p);
+      if (status === 'running') {
+        const flow = document.createElementNS(SVG, 'path');
+        flow.setAttribute('d', d);
+        flow.setAttribute('class', 'flow');
+        flow.style.animationDelay = phase;
+        svg.append(flow);
+      }
     }
     treeEl.prepend(svg);
   };
@@ -149,7 +167,7 @@ export const PAGE = `<!doctype html>
         item.append(card(n, !n.parent));
         n.el = item;
         level.append(item);
-        if (n.parent) edges.push([n.parent.el, item]);
+        if (n.parent) edges.push([n.parent.el, item, n.status]);
       }
       treeEl.append(level);
     }

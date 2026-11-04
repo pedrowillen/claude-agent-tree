@@ -92,7 +92,7 @@ export const registerTree: Register = on => {
 
   on('tool.call', async ($, e, next) => {
     // SubagentHandback is how a subagent hands its report back: not work worth listing
-    if (e.agentId !== undefined && e.tool !== 'SubagentHandback') {
+    if (e.tool !== 'SubagentHandback') {
       const call = callLabel({ ...e })
       await save($, t => patch(t, e.agentId, n => ({ ...n, tools: n.tools + 1, calls: [...n.calls, call].slice(-MAX_CALLS) })))
     }

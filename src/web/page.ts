@@ -144,7 +144,7 @@ export const PAGE = `<!doctype html>
 
     // an agent with something to show opens on a click: its tool calls and its whole answer
     const calls = n.calls || [];
-    if (!isMain && (calls.length > 0 || n.answer)) {
+    if (calls.length > 0 || n.answer) {
       c.classList.add('click');
       c.dataset.card = n.id;
       c.tabIndex = 0;

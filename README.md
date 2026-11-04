@@ -61,7 +61,7 @@ The same tree is served as a live web page at **http://127.0.0.1:47821/?t=&lt;ke
 Web: http://127.0.0.1:47822/?t=3f9a1c07d2b4e856 (47821 in use)
 ```
 
-Click an agent's card to open it: the list of its tool calls (the last 50, each as `Tool: what it was given`) and its answer (up to 4000 characters). A card flashes when its agent finishes (green), fails (red) or is aborted (yellow).
+Click a session's card to open it: the main session shows its last 50 tool calls (each as `Tool: what it was given`); subagent cards also show their answer (up to 4000 characters). A card flashes when its agent finishes (green), fails (red) or is aborted (yellow).
 
 Each card also shows what the agent has cost so far and how full its context is, for example `~$0.092 · ok · ctx 126.0k / 1.0M (13%)`:
 

@@ -47,6 +47,7 @@ claude --plugin-dir C:\projects\claude-agent-tree
 
 ### Reading the pane
 
+- **Header**: `Agents · <session title>`. The title is the one Claude Code keeps for the session (a name you gave it, else the generated one), read from the session's transcript when a turn ends, so it shows after the first turn and follows a rename. It is cut at 30 characters; with no title the header is just `Agents`.
 - **Main session**: model and effort of the last request, plus total tokens (`in` includes cache; the cached part is shown in parentheses).
 - **One node per subagent**: `[running]`, `[ok]`, `[error]` or `[aborted]`, the subagent type, model and effort, the task description, tokens, tool calls and duration, then the first line of its answer (up to 200 characters).
 - **Subagents** footer: tokens summed over the subagents shown.
@@ -91,7 +92,7 @@ A mod is a Claude Code plugin whose hooks module runs inside the app. `agent-tre
 | `agent.spawn` | Adds a subagent node (clearing finished ones if stale) |
 | `turn.step` | Records the real model and effort of each request, and from the usage that ends it adds the request's estimated cost and sets the context fill |
 | `tool.call` | Counts a subagent's tool calls |
-| `turn.complete` | Adds token usage; for a subagent, sets status, duration and answer summary |
+| `turn.complete` | Adds token usage; for a subagent, sets status, duration and answer summary; at the end of the main turn, refreshes the session title in the pane's header |
 | `ui.render` (`Pane`) | Draws the tree with `Box` and `Text` |
 
 The hooks on the engine's events call `next(e)` and change nothing, so the mod only observes: it never changes, blocks or delays what the engine does. Only the mod's own `/agent-tree` command and the drawing of its pane answer for themselves.
@@ -108,6 +109,7 @@ src/session.ts               session start (server, question, command) and the c
 src/view.ts                  asks how to see the agents and shows the page the way the user chose
 src/choice.ts                the question's options and how its answer is read
 src/tree.ts                  keeps the tree of agents up to date from the loop's events
+src/title.ts                 reads the session title from its transcript and puts it in the pane's header
 src/pane.tsx                 draws the terminal pane
 src/state.ts                 shared constants and initial values
 src/format.ts                number and text formatters

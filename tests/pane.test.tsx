@@ -340,3 +340,43 @@ test('a stopped or partly priced run is not rated, and an interrupted step close
   expect(a2.rating).toBeUndefined() // a stopped run is not praised
   stop()
 })
+
+test('the pane tab carries the session title once a turn has ended', async ($, on) => {
+  let title = ''
+  const opens: string[] = []
+  on('command.register', () => ({ value: { command: 'agent-tree' } }))
+  on('ui.open', (_, e) => {
+    opens.push(e.title ?? '')
+    return { value: { isPlaced: true } }
+  })
+  on('session.start', (_, e) => ({ cwd: e.cwd }))
+  on('turn.complete', (_, e) => ({ text: e.answer }))
+  // the page's server prints nothing; the title script prints what the transcript holds
+  on('process.spawn', async function* (_, e) {
+    if (title !== '' && e.input?.includes('custom-title')) yield { stream: 'stdout' as const, text: title }
+    return { value: { code: 0, signal: null } }
+  })
+  const end = async (agentId?: string) => {
+    await $.turn.complete({ answer: 'ok', durationMs: 1, isAborted: false, turnId: 'x', reason: 'answer', agentId })
+    await new Promise(done => setTimeout(done, 50))
+  }
+
+  await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
+  await end()
+  expect(opens).toEqual(['Agents']) // no title yet: the pane keeps its name
+
+  title = 'Notas do projeto'
+  await end('a1') // a subagent's end does not look
+  expect(opens).toEqual(['Agents'])
+  await end()
+  await end() // the same title does not open it again
+  expect(opens).toEqual(['Agents', 'Agents · Notas do projeto'])
+
+  title = 'Um título de sessão muito mais comprido que o espaço do cabeçalho'
+  await end()
+  expect(opens[2]).toBe('Agents · Um título de sessão muito mai…')
+
+  title = '' // back to no title: the pane goes back to its name
+  await end()
+  expect(opens[3]).toBe('Agents')
+})

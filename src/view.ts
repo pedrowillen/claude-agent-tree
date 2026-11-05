@@ -32,10 +32,11 @@ export async function reveal($: EngineInterface) {
   if (v.window) await openWindow($, url)
 }
 
-// asks how to see the agents, in the engine's own question dialog, and applies the answer
-export async function choose($: EngineInterface) {
-  const options = optionsFor(await isWindows($))
-  const answer = await $.ui.ask(QUESTION, { options, header: 'Agent Tree', multiSelect: true }).catch(() => '')
+// applies how to see the agents. With `isAsking` it asks first, in the engine's own question
+// dialog (only `/agent-tree` does); without it the pane opens, the same as a dismissed dialog.
+export async function choose($: EngineInterface, isAsking: boolean) {
+  const options = isAsking ? optionsFor(await isWindows($)) : []
+  const answer = isAsking ? await $.ui.ask(QUESTION, { options, header: 'Agent Tree', multiSelect: true }).catch(() => '') : ''
   const picked = parseChoice(answer)
 
   await update($, view, () => ({ ...picked, chosen: true, isShown: false }))

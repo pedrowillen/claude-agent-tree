@@ -372,11 +372,18 @@ test('the pane tab carries the session title once a turn has ended', async ($, o
   await end() // the same title does not open it again
   expect(opens).toEqual(['Agents', 'Agents · Notas do projeto'])
 
+  // asking again opens the pane again: it must keep the title, now and at the next turn
+  await $.command.run({ command: 'agent-tree', args: '' })
+  await new Promise(done => setTimeout(done, 50))
+  expect(opens.at(-1)).toBe('Agents · Notas do projeto')
+  await end()
+  expect(opens).toHaveLength(3)
+
   title = 'Um título de sessão muito mais comprido que o espaço do cabeçalho'
   await end()
-  expect(opens[2]).toBe('Agents · Um título de sessão muito mai…')
+  expect(opens[3]).toBe('Agents · Um título de sessão muito mai…')
 
   title = '' // back to no title: the pane goes back to its name
   await end()
-  expect(opens[3]).toBe('Agents')
+  expect(opens[4]).toBe('Agents')
 })

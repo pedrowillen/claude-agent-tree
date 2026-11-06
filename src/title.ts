@@ -1,4 +1,4 @@
-import { atom, read } from 'claude-code'
+import { atom, read, update } from 'claude-code'
 import type { EngineInterface } from 'claude-code'
 
 import { INITIAL_VIEW, PANE } from './state'
@@ -37,10 +37,9 @@ try {
 process.stdout.write(titles.custom || titles.ai || '');
 `
 
-let shown = 'Agents' // the title the pane carries now
-
-// reads the title and, when it changed, opens the pane again under it: the tab label is the
-// title of the pane's latest open (function declaration: the engine follows `$` only into those)
+// reads the title and, when it differs from the pane's label (kept in the `view` atom, which every
+// open of the pane uses), opens the pane again under it: the tab label is the title of the pane's
+// latest open (function declaration: the engine follows `$` only into those)
 export async function showTitle($: EngineInterface) {
   let text = ''
   try {
@@ -53,8 +52,9 @@ export async function showTitle($: EngineInterface) {
 
   const name = text.trim().replace(/\s+/g, ' ')
   const label = name === '' ? 'Agents' : `Agents · ${name.length > MAX_TITLE ? `${name.slice(0, MAX_TITLE - 1)}…` : name}`
-  if (label === shown || !(await read($, view)).pane) return
+  const current = await read($, view)
+  if (label === current.title || !current.pane) return
 
-  shown = label
+  await update($, view, x => ({ ...x, title: label }))
   await $.ui.open({ id: PANE, title: label })
 }

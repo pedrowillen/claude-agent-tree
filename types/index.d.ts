@@ -49,6 +49,7 @@ export type View = {
   web: boolean // the local web page
   window: boolean // the page as an Edge app window (Windows only)
   isShown: boolean // the web page and window were already announced or opened
+  title: string // the pane's tab label: `Agents`, then `Agents · <session title>`; every open of the pane uses it
 }
 
 declare module 'claude-code' {

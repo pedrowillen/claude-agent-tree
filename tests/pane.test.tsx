@@ -4,6 +4,7 @@ import { optionsFor, parseChoice, QUESTION } from '../src/choice'
 import { contextText, costText, callLabel, usd } from '../src/format'
 import { costOf, rate, windowOf } from '../src/pricing'
 import { node } from '../src/state'
+import { isNewer, UPDATE } from '../src/update'
 import { expect, test } from 'claude-code/testing'
 
 const pane = (bodyColumns: number) => ({
@@ -570,4 +571,62 @@ test('the question is asked only by /agent-tree, and its answer comes back at th
 
   await start()
   expect(opens).toEqual(['Agents', 'Agents', 'Agents']) // still the web page, not the pane
+})
+
+test('versions compare number by number', () => {
+  expect(isNewer('v0.10.0', '0.9.1')).toBe(true)
+  expect(isNewer('v0.8.0', '0.8.0')).toBe(false)
+  expect(isNewer('v0.7.2', '0.8.0')).toBe(false)
+  expect(isNewer('v1.0', '0.9.9')).toBe(true)
+})
+
+test('/agent-tree-update says when the copy is current, and pulls a newer release on a yes', async ($, on) => {
+  let latest = 'v0.8.0'
+  let answer = UPDATE
+  let pullCode = 0
+  const runs: string[] = []
+  const toasts: string[] = []
+  let asked = ''
+  // the engine hands the path with the system's separators
+  on('fs.read', (_, e) => ({ value: /[\\/]\.claude-plugin[\\/]plugin\.json$/.test(e.path) ? '{ "version": "0.8.0" }' : '' }))
+  on('http.fetch', (_, e) => {
+    const isGitHub = e.url.startsWith('https://api.github.com/')
+    return { value: { status: 200, ok: true, headers: {}, text: isGitHub ? JSON.stringify({ tag_name: latest }) : '' } }
+  })
+  on('tool.call', (_, e) => {
+    if (e.tool !== 'AskUserQuestion') return { result: {} }
+    asked = JSON.stringify(e)
+    return { result: { answers: { [`agent-tree ${latest} is out. Update now?`]: answer } } }
+  })
+  on('process.run', (_, e) => {
+    runs.push(e.argv.join(' '))
+    return { value: { exitCode: pullCode, stdout: '', stderr: '' } }
+  })
+  on('ui.toast', (_, e) => {
+    toasts.push(e.text)
+    return { value: undefined }
+  })
+  const run = async () => {
+    const done = await $.command.run({ command: 'agent-tree-update', args: '' })
+    await new Promise(resolve => setTimeout(resolve, 50))
+    return done.text
+  }
+
+  expect(await run()).toBe('agent-tree 0.8.0 is up to date.')
+  expect(asked).toBe('')
+
+  latest = 'v0.9.0'
+  expect(await run()).toBe('agent-tree v0.9.0 is out (this is 0.8.0).')
+  expect(asked).toContain('Update now?')
+  expect(runs).toHaveLength(1)
+  expect(runs[0]).toMatch(/^git -C .+ pull --ff-only$/)
+  expect(toasts.at(-1)).toBe('agent-tree updated to v0.9.0. Restart the Claude app to load it.')
+
+  pullCode = 1 // a clone with changes of its own: left as it is, and the toast says what to do
+  await run()
+  expect(toasts.at(-1)).toMatch(/^agent-tree could not update itself\. Run `git pull` in .+, then restart the Claude app\.$/)
+
+  answer = 'Not now'
+  await run()
+  expect(runs).toHaveLength(2) // no pull without a yes
 })

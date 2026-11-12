@@ -45,6 +45,16 @@ From the terminal CLI, you can load it for a single session instead:
 claude --plugin-dir C:\projects\claude-agent-tree
 ```
 
+### Update
+
+Run `/agent-tree-update`. It compares the version in your copy with the newest [release](https://github.com/pedrowillen/claude-agent-tree/releases) and, when there is a newer one, asks whether to update: on a yes it runs `git pull --ff-only` in the mod's folder. Then quit the Claude desktop app completely and open it again, so new sessions load the new code.
+
+The pull is left undone when your clone has changes of its own or is checked out at a tag (a toast says so); update it by hand then:
+
+```bash
+git -C C:\projects\claude-agent-tree pull
+```
+
 ### Reading the pane
 
 - **Header**: `Agents · <session title>`. The title is the one Claude Code keeps for the session (a name you gave it, else the generated one), read from the session's transcript when a turn ends, so it shows after the first turn and follows a rename. It is cut at 30 characters; with no title the header is just `Agents`. A title change does not open a pane you closed; the pane carries the new title the next time it opens.
@@ -94,8 +104,9 @@ A mod is a Claude Code plugin whose hooks module runs inside the app. `agent-tre
 
 | Event | What the mod does |
 | --- | --- |
-| `session.start` | Starts the page's server (kept up until the session ends), applies the kept answer to the question (the pane when there is none) and registers `/agent-tree`, which asks how to see the agents and keeps the answer |
+| `session.start` | Starts the page's server (kept up until the session ends), applies the kept answer to the question (the pane when there is none) and registers `/agent-tree`, which asks how to see the agents and keeps the answer, and `/agent-tree-update` |
 | `command.run` (`agent-tree`) | Asks again |
+| `command.run` (`agent-tree-update`) | Compares the installed version with the newest GitHub release and offers to `git pull` it |
 | `turn.start` | On a new user prompt, marks the tree as stale |
 | `agent.spawn` | Adds a subagent node (clearing finished ones if stale) |
 | `turn.step` | Records the real model and effort of each request, and from the usage that ends it adds the request's estimated cost and sets the context fill |
@@ -116,6 +127,7 @@ hooks/register.tsx           entry: composes the three features below
 src/session.ts               session start (server, question, command) and the command that asks again
 src/view.ts                  asks how to see the agents and shows the page the way the user chose
 src/choice.ts                the question's options and how its answer is read
+src/update.ts                `/agent-tree-update`: the newest release, and the pull that updates the mod
 src/tree.ts                  keeps the tree of agents up to date from the loop's events
 src/title.ts                 reads the session title from its transcript and puts it in the pane's header
 src/pane.tsx                 draws the terminal pane

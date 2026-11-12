@@ -10,6 +10,7 @@ export const registerSession: Register = on => {
     void serve($)
     void choose($, false)
     await $.command.register({ name: 'agent-tree', description: 'Choose how to see the agent tree' })
+    await $.command.register({ name: 'agent-tree-update', description: 'Check for a newer agent-tree and update it' })
 
     return next(e)
   })

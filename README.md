@@ -37,7 +37,7 @@ Subagents: 12.4k in / 0.6k out
 
 3. Quit the Claude desktop app completely and open it again, so new sessions see the variable.
 
-4. Start a session in the **Code** tab. A question asks how you want to see the agents: the **Agents** pane, the **web page**, the **Edge window** (Windows only), or any mix. Run `/agent-tree` to choose again.
+4. Start a session in the **Code** tab. The **Agents** pane opens by itself. Run `/agent-tree` once and a question asks how you want to see the agents: the **Agents** pane, the **web page**, the **Edge window** (Windows only), or any mix. The answer is remembered: every later session starts the way you chose, without asking, until you run `/agent-tree` again.
 
 From the terminal CLI, you can load it for a single session instead:
 
@@ -73,7 +73,7 @@ The terminal pane shows the same cost, rating and context, and the footer adds u
 
 When a subagent finishes, a toast (with its cost and rating) says so; a failed one also raises a system notification. An aborted one (usually your own Esc) only gets the toast.
 
-The server always runs; what you pick decides what is shown. **Web page** shows the address as a toast and in the status line. **Edge window** opens the page as its own window through Edge's app mode (`msedge --app=...`: no tabs, no address bar, with the Agent Tree icon in the title bar and the taskbar); it needs Edge, which comes with Windows 11, so the option is offered on Windows only. If you dismiss the question or type something else, the pane opens.
+The server always runs; what you pick decides what is shown. **Web page** shows the address as a toast and in the status line. **Edge window** opens the page as its own window through Edge's app mode (`msedge --app=...`: no tabs, no address bar, with the Agent Tree icon in the title bar and the taskbar); it needs Edge, which comes with Windows 11, so the option is offered on Windows only. If you dismiss the question or type something else, the choice kept before is applied again (the pane when there is none). The answer is kept with `$.store`, which outlives the session; with none kept, a session starts with the pane.
 
 If every port is taken the line reads `Web: ports 47821-47830 in use`; without Node on the `PATH` it reads `Web: node not found`. The pane works the same either way. Each session gets its own server, so a second session takes the next free port.
 
@@ -85,7 +85,7 @@ A mod is a Claude Code plugin whose hooks module runs inside the app. `agent-tre
 
 | Event | What the mod does |
 | --- | --- |
-| `session.start` | Starts the page's server (kept up until the session ends), asks how to see the agents and registers `/agent-tree` |
+| `session.start` | Starts the page's server (kept up until the session ends), applies the kept answer to the question (the pane when there is none) and registers `/agent-tree`, which asks how to see the agents and keeps the answer |
 | `command.run` (`agent-tree`) | Asks again |
 | `turn.start` | On a new user prompt, marks the tree as stale |
 | `agent.spawn` | Adds a subagent node (clearing finished ones if stale) |

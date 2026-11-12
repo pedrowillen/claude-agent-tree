@@ -1,6 +1,6 @@
 import type { Engine } from 'claude-code'
 import { webLines } from '../hooks/register'
-import { optionsFor, parseChoice } from '../src/choice'
+import { optionsFor, parseChoice, QUESTION } from '../src/choice'
 import { contextText, costText, callLabel, usd } from '../src/format'
 import { costOf, rate, windowOf } from '../src/pricing'
 import { node } from '../src/state'
@@ -404,4 +404,69 @@ test('the pane tab carries the session title once a turn has ended', async ($, o
   expect(opens.at(-1)).toBe('Agents · Renamed')
 
   expect(sessions.every(id => id === 's-1')).toBe(true) // the script finds the transcript by `$.session.id()`
+})
+
+test('the question is asked only by /agent-tree, and its answer comes back at the next session start', async ($, on) => {
+  let answer = 'Web page'
+  let asks = 0
+  const opens: string[] = []
+  const store: Record<string, unknown> = {} // the engine's $.store, which outlives the session
+  on('store.get', (_, e) => ({ value: store[e.key] }))
+  on('store.set', (_, e) => {
+    store[e.key] = e.value
+    return { value: undefined }
+  })
+  on('command.register', () => ({ value: { command: 'agent-tree' } }))
+  on('ui.open', (_, e) => {
+    opens.push(e.title ?? '')
+    return { value: { isPlaced: true } }
+  })
+  on('session.start', (_, e) => ({ cwd: e.cwd }))
+  on('process.spawn', async function* () { return { value: { code: 1, signal: null } } })
+  // the question goes through the AskUserQuestion tool: the answer is keyed by the question's text
+  on('tool.call', (_, e) => {
+    if (e.tool !== 'AskUserQuestion') return { result: {} }
+    asks++
+    return { result: { answers: { [QUESTION]: answer } } }
+  })
+  const settle = () => new Promise(done => setTimeout(done, 50))
+  const start = async () => {
+    await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
+    await settle()
+  }
+
+  await start()
+  expect(asks).toBe(0) // nothing kept yet: no question, and the pane opens
+  expect(opens).toEqual(['Agents'])
+
+  await $.command.run({ command: 'agent-tree', args: '' })
+  await settle()
+  expect(asks).toBe(1)
+  expect(opens).toEqual(['Agents']) // the answer was the web page only: the pane is not opened again
+
+  await start() // the kept answer is applied, without asking and without the pane
+  expect(asks).toBe(1)
+  expect(opens).toEqual(['Agents'])
+
+  answer = 'Agents pane'
+  await $.command.run({ command: 'agent-tree', args: '' })
+  await settle()
+  expect(asks).toBe(2)
+  expect(opens).toEqual(['Agents', 'Agents'])
+
+  await start() // the newest answer is the one kept
+  expect(asks).toBe(2)
+  expect(opens).toEqual(['Agents', 'Agents', 'Agents'])
+
+  answer = 'Web page'
+  await $.command.run({ command: 'agent-tree', args: '' })
+  await settle()
+  answer = 'just show me something' // free text picks no option: the kept answer stays and is applied
+  await $.command.run({ command: 'agent-tree', args: '' })
+  await settle()
+  expect(asks).toBe(4)
+  expect(opens).toEqual(['Agents', 'Agents', 'Agents'])
+
+  await start()
+  expect(opens).toEqual(['Agents', 'Agents', 'Agents']) // still the web page, not the pane
 })

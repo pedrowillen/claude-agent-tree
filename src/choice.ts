@@ -8,10 +8,15 @@ export const LABEL = { pane: 'Agents pane', web: 'Web page', window: 'Edge windo
 export const optionsFor = (isWindows: boolean): string[] =>
   isWindows ? [LABEL.pane, LABEL.web, LABEL.window] : [LABEL.pane, LABEL.web]
 
+const labels = (answer: string) => answer.split(',').map(s => s.trim())
+
+// whether the answer picks at least one option (not free text or a dismissed dialog)
+export const isPick = (answer: string) => Object.values(LABEL).some(label => labels(answer).includes(label))
+
 // the answer is the labels chosen, comma-joined; anything else (free text, a dismissed
 // dialog) falls back to the pane, so the user always sees something
 export const parseChoice = (answer: string): Pick<View, 'pane' | 'web' | 'window'> => {
-  const picked = answer.split(',').map(s => s.trim())
+  const picked = labels(answer)
   const view = {
     pane: picked.includes(LABEL.pane),
     web: picked.includes(LABEL.web),

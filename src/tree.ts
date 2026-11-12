@@ -5,6 +5,7 @@ import type { AgentNode, AgentStatus, Tree } from '../types'
 import { callLabel, costText } from './format'
 import { costOf, rate, windowOf } from './pricing'
 import { INITIAL_TREE, MAX_AGENTS, MAX_ANSWER, MAX_CALLS, node } from './state'
+import { showTitle } from './title'
 import { push } from './web/serve'
 
 const tree = atom({ plugin: 'agent-tree', key: 'tree' } as const, INITIAL_TREE)
@@ -102,6 +103,8 @@ export const registerTree: Register = on => {
 
   on('turn.complete', async ($, e, next) => {
     const done = await next(e)
+    // the session's title may have been made or changed by this turn
+    if (e.agentId === undefined) void showTitle($)
     await save($, t => patch(t, e.agentId, n => {
       const used = addUsage(n, e.usage)
       if (e.agentId === undefined) return used

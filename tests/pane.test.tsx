@@ -341,6 +341,71 @@ test('a stopped or partly priced run is not rated, and an interrupted step close
   stop()
 })
 
+test('the pane tab carries the session title once a turn has ended', async ($, on) => {
+  let title = ''
+  let isOpen = true // whether the pane is open, as `$.ui.panes()` says
+  const opens: string[] = []
+  const sessions: (string | undefined)[] = [] // the session id each title script was given
+  on('command.register', () => ({ value: { command: 'agent-tree' } }))
+  on('ui.open', (_, e) => {
+    opens.push(e.title ?? '')
+    return { value: { isPlaced: true } }
+  })
+  on('ui.panes', () => ({
+    value: isOpen ? [{ id: 'agent-tree', title: opens.at(-1) ?? '', isShown: true, isFocused: false, isPlaced: true }] : [],
+  }))
+  on('session.id', () => ({ value: 's-1' }))
+  on('session.start', (_, e) => ({ cwd: e.cwd }))
+  on('turn.complete', (_, e) => ({ text: e.answer }))
+  // the page's server prints nothing; the title script prints what the transcript holds
+  on('process.spawn', async function* (_, e) {
+    if (!e.input?.includes('custom-title')) return { value: { code: 0, signal: null } }
+    sessions.push(e.env?.CLAUDE_CODE_SESSION_ID)
+    if (title !== '') yield { stream: 'stdout' as const, text: title }
+    return { value: { code: 0, signal: null } }
+  })
+  const end = async (agentId?: string) => {
+    await $.turn.complete({ answer: 'ok', durationMs: 1, isAborted: false, turnId: 'x', reason: 'answer', agentId })
+    await new Promise(done => setTimeout(done, 50))
+  }
+
+  await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
+  await end()
+  expect(opens).toEqual(['Agents']) // no title yet: the pane keeps its name
+
+  title = 'Notas do projeto'
+  await end('a1') // a subagent's end does not look
+  expect(opens).toEqual(['Agents'])
+  await end()
+  await end() // the same title does not open it again
+  expect(opens).toEqual(['Agents', 'Agents · Notas do projeto'])
+
+  // asking again opens the pane again: it must keep the title, now and at the next turn
+  await $.command.run({ command: 'agent-tree', args: '' })
+  await new Promise(done => setTimeout(done, 50))
+  expect(opens.at(-1)).toBe('Agents · Notas do projeto')
+  await end()
+  expect(opens).toHaveLength(3)
+
+  title = 'Um título de sessão muito mais comprido que o espaço do cabeçalho'
+  await end()
+  expect(opens[3]).toBe('Agents · Um título de sessão muito mai…')
+
+  title = '' // no title found (a failed read): the title shown stays
+  await end()
+  expect(opens).toHaveLength(4)
+
+  isOpen = false // the user closed the pane: a new title does not open it again
+  title = 'Renamed'
+  await end()
+  expect(opens).toHaveLength(4)
+  await $.command.run({ command: 'agent-tree', args: '' }) // but its next open carries it
+  await new Promise(done => setTimeout(done, 50))
+  expect(opens.at(-1)).toBe('Agents · Renamed')
+
+  expect(sessions.every(id => id === 's-1')).toBe(true) // the script finds the transcript by `$.session.id()`
+})
+
 test('the question is asked only by /agent-tree, and its answer comes back at the next session start', async ($, on) => {
   let answer = 'Web page'
   let asks = 0

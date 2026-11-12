@@ -51,7 +51,8 @@ export async function choose($: EngineInterface, isAsking: boolean) {
   }
   const picked = parseChoice(answer)
 
-  await update($, view, () => ({ ...picked, chosen: true, isShown: false }))
-  if (picked.pane) await $.ui.open({ id: PANE, title: 'Agents' })
+  // the title stays: asking again must not take the session title off the header
+  await update($, view, x => ({ ...x, ...picked, chosen: true, isShown: false }))
+  if (picked.pane) await $.ui.open({ id: PANE, title: (await read($, view)).title })
   await reveal($)
 }

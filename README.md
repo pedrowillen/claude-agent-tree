@@ -47,7 +47,7 @@ claude --plugin-dir C:\projects\claude-agent-tree
 
 ### Reading the pane
 
-- **Header**: `Agents · <session title>`. The title is the one Claude Code keeps for the session (a name you gave it, else the generated one), read from the session's transcript when a turn ends, so it shows after the first turn and follows a rename. It is cut at 30 characters; with no title the header is just `Agents`.
+- **Header**: `Agents · <session title>`. The title is the one Claude Code keeps for the session (a name you gave it, else the generated one), read from the session's transcript when a turn ends, so it shows after the first turn and follows a rename. It is cut at 30 characters; with no title the header is just `Agents`. A title change does not open a pane you closed; the pane carries the new title the next time it opens.
 - **Main session**: model and effort of the last request, plus total tokens (`in` includes cache; the cached part is shown in parentheses).
 - **One node per subagent**: `[running]`, `[ok]`, `[error]` or `[aborted]`, the subagent type, model and effort, the task description, tokens, tool calls and duration, then the first line of its answer (up to 200 characters).
 - **Subagents** footer: tokens summed over the subagents shown.

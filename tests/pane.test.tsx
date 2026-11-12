@@ -88,14 +88,115 @@ test('the server reports a busy port, then the tree reaches the next one', async
 
   await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
   expect(await webLine($, 100)).toBe('Web: server stopped')
-  expect(posts).toEqual(['http://127.0.0.1:47822/state?t=k3y'])
+  expect(posts).toEqual(['http://127.0.0.1:47822/state?t=k3y&s=session'])
 })
 
 test('the page line names the ports in use, joined on a wide pane, apart on a narrow one', () => {
-  const web = { status: 'listening' as const, port: 47822, token: 'k3y', error: '' }
+  const web = { status: 'listening' as const, port: 47822, token: 'k3y', error: '', isShared: false }
   expect(webLines({ ...web, busy: [] }, false)).toEqual(['Web: http://127.0.0.1:47822/?t=k3y'])
   expect(webLines({ ...web, busy: [47821] }, false)).toEqual(['Web: http://127.0.0.1:47822/?t=k3y (47821 in use)'])
   expect(webLines({ ...web, busy: [47821] }, true)).toEqual(['Web: http://127.0.0.1:47822/?t=k3y', '  47821 in use'])
+  expect(webLines({ ...web, busy: [47821], isShared: true }, false)).toEqual(['Web: http://127.0.0.1:47822/?t=k3y (47821 in use, shared)'])
+})
+
+test('a later session shares the running server: same key, its own id, grouped by repository', async ($, on) => {
+  const store: Record<string, unknown> = { key: 'kept-key' }
+  const posts: { url: string; body: string }[] = []
+  let input = ''
+  let stop = () => {}
+  on('store.get', (_, e) => ({ value: store[e.key] }))
+  on('store.set', (_, e) => {
+    store[e.key] = e.value
+    return { value: undefined }
+  })
+  on('session.id', () => ({ value: 's-2' }))
+  on('session.repo', () => ({ value: { root: '/repo', remote: null, internal: false, name: null } }))
+  on('command.register', () => ({ value: { command: 'agent-tree' } }))
+  on('ui.open', () => ({ value: { isPlaced: true } }))
+  on('session.start', (_, e) => ({ cwd: e.cwd }))
+  on('http.fetch', (_, e) => {
+    posts.push({ url: e.url, body: String(e.init?.body) })
+    return { value: { status: 200, ok: true, headers: {}, text: '' } }
+  })
+  // another session's server holds the first port: this one shares it
+  on('process.spawn', async function* (_, e) {
+    input = e.input ?? ''
+    yield { stream: 'stdout' as const, text: 'SHARED 47821\n' }
+    await new Promise<void>(resolve => { stop = resolve })
+    return { value: { code: 0, signal: null } }
+  })
+
+  await $.session.start({ cwd: '/repo/.worktrees/feature', surface: 'desktop', isInteractive: true })
+  await new Promise(resolve => setTimeout(resolve, 50))
+  expect(input).toContain('"kept-key"') // every session's server takes the one kept key
+  expect(input).toContain('"s-2"')
+  const post = posts.find(p => p.url.includes('/state'))
+  expect(post?.url).toBe('http://127.0.0.1:47821/state?t=kept-key&s=s-2')
+  const sent = JSON.parse(post?.body ?? 'null')
+  expect([sent.id, sent.group, sent.title]).toEqual(['s-2', '/repo', '']) // a worktree is grouped under its repository
+  expect(sent.tree.main.type).toBe('Main session')
+  expect(await webLine($, 100)).toBe('Web: http://127.0.0.1:47821/?t=kept-key (shared)')
+  stop()
+})
+
+test('with no key kept, the first session makes one and keeps it for the others', async ($, on) => {
+  const store: Record<string, unknown> = {}
+  let input = ''
+  on('store.get', (_, e) => ({ value: store[e.key] }))
+  on('store.set', (_, e) => {
+    store[e.key] = e.value
+    return { value: undefined }
+  })
+  on('command.register', () => ({ value: { command: 'agent-tree' } }))
+  on('ui.open', () => ({ value: { isPlaced: true } }))
+  on('session.start', (_, e) => ({ cwd: e.cwd }))
+  on('process.spawn', async function* (_, e) {
+    input = e.input ?? ''
+    return { value: { code: 1, signal: null } }
+  })
+
+  await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
+  await new Promise(resolve => setTimeout(resolve, 50))
+  expect(store.key).toMatch(/^[0-9a-f]{32}$/)
+  expect(input).toContain(`"${store.key}"`)
+})
+
+test('the Edge window opens only when no page is open on the server yet', async ($, on) => {
+  let pages = 1
+  const runs: string[] = []
+  let stop = () => {}
+  const store: Record<string, unknown> = { key: 'k3y', answer: 'Edge window' } // the window was chosen before
+  on('store.get', (_, e) => ({ value: store[e.key] }))
+  on('store.set', () => ({ value: undefined }))
+  on('command.register', () => ({ value: { command: 'agent-tree' } }))
+  on('ui.open', () => ({ value: { isPlaced: true } }))
+  on('session.start', (_, e) => ({ cwd: e.cwd }))
+  on('http.fetch', (_, e) => {
+    const text = e.url.endsWith('/hello') ? JSON.stringify({ app: 'agent-tree', v: 2, pages }) : ''
+    return { value: { status: 200, ok: true, headers: {}, text } }
+  })
+  on('process.run', (_, e) => {
+    runs.push(e.argv.join(' '))
+    return { value: { exitCode: 0, stdout: '', stderr: '' } }
+  })
+  on('process.spawn', async function* () {
+    yield { stream: 'stdout' as const, text: 'SHARED 47821\n' }
+    await new Promise<void>(resolve => { stop = resolve })
+    return { value: { code: 0, signal: null } }
+  })
+  const start = async () => {
+    await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
+    await new Promise(resolve => setTimeout(resolve, 100))
+  }
+
+  await start() // a page is open on the shared server: no second window
+  expect(runs.filter(r => r.includes('msedge'))).toEqual([])
+  stop()
+
+  pages = 0
+  await start()
+  expect(runs.filter(r => r.includes('msedge'))).toEqual(['cmd /c start  msedge --app=http://127.0.0.1:47821/?t=k3y'])
+  stop()
 })
 
 test('the pane says when every port is in use, or node is missing', async ($, on) => {
@@ -182,7 +283,7 @@ test('a subagent keeps its calls and answer, and its end is announced', async ($
   await end('a3', 'aborted', '')
   await new Promise(resolve => setTimeout(resolve, 400)) // the last send waits its gap
 
-  const [a1] = JSON.parse(bodies.at(-1) ?? 'null').agents
+  const [a1] = JSON.parse(bodies.at(-1) ?? 'null').tree.agents
   expect(a1.tools).toBe(60) // the handback is no work
   expect(a1.calls).toHaveLength(50) // the last 50, in order
   expect([a1.calls[0], a1.calls[49]]).toEqual(['Read: f10', 'Read: f59'])
@@ -271,7 +372,7 @@ test('each request adds its cost and fills the context; the end of a subagent ra
   await $.turn.complete({ answer: 'ok', durationMs: 1000, isAborted: false, turnId: 'x', reason: 'answer', agentId: 'a1' })
   await new Promise(resolve => setTimeout(resolve, 400))
 
-  const [a1] = JSON.parse(bodies.at(-1) ?? 'null').agents
+  const [a1] = JSON.parse(bodies.at(-1) ?? 'null').tree.agents
   // (1000 + 3000) input at $0.10 and (500 + 100) output at $0.50, per million
   expect(Math.round(a1.costUsd * 1e7) / 1e7).toBe(0.0007)
   expect(a1.contextTokens).toBe(3000) // the last request's prompt, not a sum
@@ -334,7 +435,7 @@ test('a stopped or partly priced run is not rated, and an interrupted step close
   await end('a2', 'aborted')
   await new Promise(resolve => setTimeout(resolve, 400))
 
-  const [a1, a2] = JSON.parse(bodies.at(-1) ?? 'null').agents
+  const [a1, a2] = JSON.parse(bodies.at(-1) ?? 'null').tree.agents
   expect(a1.isCostPartial).toBe(true) // the unpriced request is missing from its total
   expect(a1.rating).toBeUndefined() // ...so no verdict
   expect(a2.rating).toBeUndefined() // a stopped run is not praised

@@ -22,8 +22,9 @@ export const webLines = (w: Web, isNarrow: boolean): string[] => {
     return [w.error === 'EADDRINUSE' ? `Web: ports ${FIRST_PORT}-${LAST_PORT} in use` : `Web: ${w.error}`]
   }
   const url = `Web: ${pageUrl(w.port, w.token)}`
-  if (w.busy.length === 0) return [url]
-  const note = `${w.busy.join(', ')} in use`
+  const notes = [...(w.busy.length > 0 ? [`${w.busy.join(', ')} in use`] : []), ...(w.isShared ? ['shared'] : [])]
+  if (notes.length === 0) return [url]
+  const note = notes.join(', ')
 
   return isNarrow ? [url, `  ${note}`] : [`${url} (${note})`]
 }

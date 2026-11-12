@@ -14,5 +14,5 @@ export const node = (id: string, type: string, description: string, model: strin
 })
 
 export const INITIAL_TREE: Tree = { main: node('main', 'Main session', '', ''), agents: [], isStale: false }
-export const INITIAL_WEB: Web = { status: 'starting', port: 0, token: '', busy: [], error: '' }
+export const INITIAL_WEB: Web = { status: 'starting', port: 0, token: '', busy: [], error: '', isShared: false }
 export const INITIAL_VIEW: View = { chosen: false, pane: false, web: false, window: false, isShown: false, title: 'Agents' }

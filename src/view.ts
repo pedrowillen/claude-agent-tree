@@ -30,7 +30,20 @@ export async function reveal($: EngineInterface) {
     $.ui.toast(`Agent Tree: ${url}`)
     $.ui.status(`Agent Tree: ${url}`)
   }
-  if (v.window) await openWindow($, url)
+  // one window for all the sessions: none when a page is already open on the shared server
+  if (v.window && (await openPages($, w.port)) === 0) await openWindow($, url)
+}
+
+// how many pages are open on the server; 0 when it cannot tell
+async function openPages($: EngineInterface, port: number) {
+  const hello = await $.http.fetch(`http://127.0.0.1:${port}/hello`).catch(() => undefined)
+  try {
+    const pages = (JSON.parse(hello?.text ?? '') as { pages?: unknown }).pages
+
+    return typeof pages === 'number' ? pages : 0
+  } catch {
+    return 0
+  }
 }
 
 // applies how to see the agents. With `isAsking` (only `/agent-tree`) it asks first, in the engine's

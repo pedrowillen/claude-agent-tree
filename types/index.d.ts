@@ -37,9 +37,10 @@ export type Tree = {
 export type Web = {
   status: 'starting' | 'listening' | 'failed'
   port: number
-  token: string // the key the page and the pushes carry (`?t=`), made by the server
+  token: string // the key the page and the pushes carry (`?t=`), shared by every session's server
   busy: number[]
   error: string
+  isShared: boolean // another session's server carries this one's tree too
 }
 
 // how the user wants to see the agents, as chosen when the session starts

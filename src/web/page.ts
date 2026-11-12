@@ -85,6 +85,10 @@ export const PAGE = `<!doctype html>
   .summary { margin-top: 6px; color: var(--dim); font-style: italic; overflow-wrap: anywhere;
     display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
   .empty { color: var(--dim); margin-top: 12px; }
+  .group + .group { margin-top: 40px; }
+  .group h2 { font-size: 15px; margin: 0 0 12px; padding-bottom: 6px; border-bottom: 1px solid var(--line); }
+  .session + .session { margin-top: 32px; }
+  .session h3 { font-size: 13px; font-weight: 600; color: var(--dim); margin: 0 0 12px; }
   footer { margin-top: 20px; color: var(--dim); font-size: 13px; }
 </style>
 </head>
@@ -140,19 +144,19 @@ export const PAGE = `<!doctype html>
     if (n.contextTokens) spend.append((spend.childNodes.length ? ' · ' : '') + 'ctx ' + k(n.contextTokens)
       + (n.contextWindow ? ' / ' + k(n.contextWindow) + ' (' + Math.max(1, Math.round(n.contextTokens / n.contextWindow * 100)) + '%)' : ''));
     if (spend.childNodes.length) c.append(spend);
-    if (n.summary && !open.has(n.id)) c.append(el('div', 'summary', n.summary));
+    if (n.summary && !open.has(n.key)) c.append(el('div', 'summary', n.summary));
 
     // an agent with something to show opens on a click: its tool calls and its whole answer
     const calls = n.calls || [];
     if (!isMain && (calls.length > 0 || n.answer)) {
       c.classList.add('click');
-      c.dataset.card = n.id;
+      c.dataset.card = n.key;
       c.tabIndex = 0;
       c.setAttribute('role', 'button');
-      c.setAttribute('aria-expanded', String(open.has(n.id)));
-      top.append(el('span', 'chev', open.has(n.id) ? '▾' : '▸'));
+      c.setAttribute('aria-expanded', String(open.has(n.key)));
+      top.append(el('span', 'chev', open.has(n.key) ? '▾' : '▸'));
       const toggle = () => {
-        if (open.has(n.id)) open.delete(n.id); else open.add(n.id);
+        if (open.has(n.key)) open.delete(n.key); else open.add(n.key);
         if (last) draw(last);
       };
       c.addEventListener('click', () => { if (!String(window.getSelection())) toggle(); });
@@ -161,20 +165,20 @@ export const PAGE = `<!doctype html>
         e.preventDefault();
         toggle();
       });
-      if (open.has(n.id)) {
+      if (open.has(n.key)) {
         const box = el('div', 'detail');
         box.addEventListener('click', e => e.stopPropagation());
         if (calls.length > 0) {
           box.append(el('div', 'dh', 'Tools (' + n.tools + (n.tools > calls.length ? ', last ' + calls.length : '') + ')'));
           const list = el('div', 'calls');
-          list.dataset.keep = n.id + ':calls';
+          list.dataset.keep = n.key + ':calls';
           for (const call of calls) { const row = el('div', 'call', call); row.title = call; list.append(row); }
           box.append(list);
         }
         if (n.answer) {
           box.append(el('div', 'dh', 'Answer'));
           const pre = el('pre', 'answer', n.answer);
-          pre.dataset.keep = n.id + ':answer';
+          pre.dataset.keep = n.key + ':answer';
           box.append(pre);
         }
         c.append(box);
@@ -184,12 +188,10 @@ export const PAGE = `<!doctype html>
   };
 
   const SVG = 'http://www.w3.org/2000/svg';
-  let edges = [];
-  let treeEl = null;
+  let trees = []; // each session's tree: { el, edges }, wired after the page is built
 
   // one wire from the bottom of a parent to the top of its child
-  const wire = () => {
-    if (!treeEl) return;
+  const wireTree = ({ el: treeEl, edges }) => {
     const old = treeEl.querySelector('.wires');
     if (old) old.remove();
     const svg = document.createElementNS(SVG, 'svg');
@@ -217,26 +219,17 @@ export const PAGE = `<!doctype html>
     }
     treeEl.prepend(svg);
   };
+  const wire = () => trees.forEach(wireTree);
 
-  const draw = t => {
-    last = t;
-    const root = document.getElementById('root');
-    // a redraw rebuilds the page, so remember where the user had scrolled
-    const before = root.querySelector('.scroll');
-    const left = before ? before.scrollLeft : null;
-    const tops = {};
-    for (const box of root.querySelectorAll('[data-keep]')) tops[box.dataset.keep] = box.scrollTop;
-    const focused = document.activeElement && document.activeElement.dataset ? document.activeElement.dataset.card : undefined;
-    const foot = document.getElementById('foot');
-    root.className = '';
-
+  // one session's tree; its cards are keyed by the session too, since every session has a main node
+  const drawTree = (t, sid) => {
     // number the nodes in spawn order; a spawn whose parent is gone hangs from the main session
-    const top = Object.assign({}, t.main, { num: 1, depth: 0, parent: null });
+    const top = Object.assign({}, t.main, { key: sid + '/main', num: 1, depth: 0, parent: null });
     const nodes = [top];
     const byId = {};
     t.agents.forEach((a, i) => {
       const parent = byId[a.parentId] || top;
-      const n = Object.assign({}, a, { num: i + 2, depth: parent.depth + 1, parent: parent });
+      const n = Object.assign({}, a, { key: sid + '/' + a.id, num: i + 2, depth: parent.depth + 1, parent: parent });
       byId[a.id] = n;
       nodes.push(n);
     });
@@ -251,24 +244,24 @@ export const PAGE = `<!doctype html>
     };
     walk(top);
 
-    treeEl = el('div', 'tree');
-    edges = [];
+    const treeEl = el('div', 'tree');
+    const edges = [];
     for (const row of levels) {
       const level = el('div', 'level');
       for (const n of row) {
-        const item = el('div', 'node' + (open.has(n.id) ? ' open' : ''));
+        const item = el('div', 'node' + (open.has(n.key) ? ' open' : ''));
         if (n.parent) {
           const now = Date.now();
-          if (seen.get(n.id) === 'running' && n.status !== 'running') flashing.set(n.id, { cls: 'flash-' + n.status, until: now + FLASH_MS });
-          const flash = flashing.get(n.id);
+          if (seen.get(n.key) === 'running' && n.status !== 'running') flashing.set(n.key, { cls: 'flash-' + n.status, until: now + FLASH_MS });
+          const flash = flashing.get(n.key);
           if (flash && flash.until > now) {
             item.classList.add(flash.cls);
             item.style.setProperty('--flash-delay', '-' + (FLASH_MS - (flash.until - now)) + 'ms');
           } else {
-            flashing.delete(n.id);
+            flashing.delete(n.key);
           }
         }
-        seen.set(n.id, n.status);
+        seen.set(n.key, n.status);
         item.append(el('div', 'badge' + (n.parent ? ' ' + n.status : ''), String(n.num)));
         item.append(card(n, !n.parent));
         n.el = item;
@@ -277,25 +270,64 @@ export const PAGE = `<!doctype html>
       }
       treeEl.append(level);
     }
+    trees.push({ el: treeEl, edges });
     const scroll = el('div', 'scroll');
+    scroll.dataset.scroll = sid;
     scroll.append(treeEl);
-    root.replaceChildren(scroll);
-    if (t.agents.length === 0) {
-      root.append(el('div', 'empty', 'No subagents this round.'));
-      foot.textContent = '';
+    return scroll;
+  };
+
+  // the last folder of a path: the repository's name
+  const base = p => (p || '').split(/[\\\\/]/).filter(Boolean).pop() || 'Other';
+
+  // every session the server carries, grouped by repository, each with its own tree
+  const draw = list => {
+    last = list;
+    const root = document.getElementById('root');
+    // a redraw rebuilds the page, so remember where the user had scrolled
+    const lefts = {};
+    for (const box of root.querySelectorAll('[data-scroll]')) lefts[box.dataset.scroll] = box.scrollLeft;
+    const tops = {};
+    for (const box of root.querySelectorAll('[data-keep]')) tops[box.dataset.keep] = box.scrollTop;
+    const focused = document.activeElement && document.activeElement.dataset ? document.activeElement.dataset.card : undefined;
+    const foot = document.getElementById('foot');
+    root.className = '';
+    trees = [];
+
+    const groups = new Map();
+    for (const s of list) groups.set(s.group, (groups.get(s.group) || []).concat([s]));
+    const parts = [];
+    for (const [group, sessions] of groups) {
+      const box = el('section', 'group');
+      box.append(el('h2', '', base(group)));
+      for (const s of sessions) {
+        const part = el('div', 'session');
+        part.append(el('h3', '', s.title || 'Session ' + String(s.id).slice(0, 8)));
+        part.append(drawTree(s.tree, s.id));
+        if (s.tree.agents.length === 0) part.append(el('div', 'empty', 'No subagents this round.'));
+        box.append(part);
+      }
+      parts.push(box);
     }
-    // the first draw centers a wide tree on the main session; later ones keep the scroll
-    scroll.scrollLeft = left === null ? Math.max(0, (scroll.scrollWidth - scroll.clientWidth) / 2) : left;
+    root.replaceChildren(...parts);
+    if (list.length === 0) root.append(el('div', 'empty', 'Waiting for a session…'));
+
+    // the first draw centers a wide tree on its main session; later ones keep the scroll
+    for (const box of root.querySelectorAll('[data-scroll]')) {
+      const left = lefts[box.dataset.scroll];
+      box.scrollLeft = left === undefined ? Math.max(0, (box.scrollWidth - box.clientWidth) / 2) : left;
+    }
     for (const box of root.querySelectorAll('[data-keep]')) if (tops[box.dataset.keep] !== undefined) box.scrollTop = tops[box.dataset.keep];
     if (focused !== undefined) {
       const again = root.querySelector('[data-card="' + CSS.escape(focused) + '"]');
       if (again) again.focus({ preventScroll: true });
     }
     wire();
-    if (t.agents.length === 0) return;
-    const sumIn = t.agents.reduce((s, a) => s + a.tokensIn, 0);
-    const sumOut = t.agents.reduce((s, a) => s + a.tokensOut, 0);
-    const sumCost = t.agents.reduce((s, a) => s + (a.costUsd || 0), 0);
+    const agents = list.flatMap(s => s.tree.agents);
+    if (agents.length === 0) { foot.textContent = ''; return; }
+    const sumIn = agents.reduce((s, a) => s + a.tokensIn, 0);
+    const sumOut = agents.reduce((s, a) => s + a.tokensOut, 0);
+    const sumCost = agents.reduce((s, a) => s + (a.costUsd || 0), 0);
     foot.textContent = 'Subagents: ' + k(sumIn) + ' in / ' + k(sumOut) + ' out' + (sumCost > 0 ? ' · ~' + usd(sumCost) : '') + ' · updated ' + new Date().toLocaleTimeString();
   };
 
@@ -308,7 +340,7 @@ export const PAGE = `<!doctype html>
   if (events) {
     events.onopen = () => { conn.textContent = 'live'; conn.classList.add('live'); };
     events.onerror = () => { conn.textContent = 'reconnecting…'; conn.classList.remove('live'); };
-    events.onmessage = m => { const t = JSON.parse(m.data); if (t) draw(t); };
+    events.onmessage = m => { const list = JSON.parse(m.data); if (Array.isArray(list)) draw(list); };
   }
 </script>
 </body>

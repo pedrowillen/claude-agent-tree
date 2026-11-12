@@ -56,7 +56,7 @@ claude --plugin-dir C:\projects\claude-agent-tree
 
 ### The web page
 
-The same tree is served as a live web page at **http://127.0.0.1:47821/?t=&lt;key&gt;**, in a monospaced font. The key is made by the server each time it starts; the pane, the status line and the Edge window carry the full link. Agents sit on one row per level, joined by wires; the wire of an agent that is working has dots running down it, from parent to child (they stop with `prefers-reduced-motion`). The mod starts a small Node server when the session starts and stops it with the session. If the port is in use it tries the next one, up to 47830, and the pane's last line says which address it took:
+The same tree is served as a live web page at **http://127.0.0.1:47821/?t=&lt;key&gt;**, in a monospaced font. The key is made once and kept with `$.store`, so every session uses the same one; the pane, the status line and the Edge window carry the full link. Agents sit on one row per level, joined by wires; the wire of an agent that is working has dots running down it, from parent to child (they stop with `prefers-reduced-motion`). The mod starts a small Node server when the session starts and stops it with the session. If the port is in use by something else it tries the next one, up to 47830, and the pane's last line says which address it took:
 
 ```
 Web: http://127.0.0.1:47822/?t=3f9a1c07d2b4e856 (47821 in use)
@@ -76,9 +76,17 @@ When a subagent finishes, a toast (with its cost and rating) says so; a failed o
 
 The server always runs; what you pick decides what is shown. **Web page** shows the address as a toast and in the status line. **Edge window** opens the page as its own window through Edge's app mode (`msedge --app=...`: no tabs, no address bar, with the Agent Tree icon in the title bar and the taskbar); it needs Edge, which comes with Windows 11, so the option is offered on Windows only. If you dismiss the question or type something else, the choice kept before is applied again (the pane when there is none). The answer is kept with `$.store`, which outlives the session; with none kept, a session starts with the pane.
 
-If every port is taken the line reads `Web: ports 47821-47830 in use`; without Node on the `PATH` it reads `Web: node not found`. The pane works the same either way. Each session gets its own server, so a second session takes the next free port.
+If every port is taken the line reads `Web: ports 47821-47830 in use`; without Node on the `PATH` it reads `Web: node not found`. The pane works the same either way.
 
-The page is plain HTML, CSS and JavaScript, follows the system's light or dark theme and updates through server-sent events. The server listens on `127.0.0.1` only and refuses requests whose `Host` is not `127.0.0.1` or `localhost`. The tree holds tool commands and answers, so `/events` and `/state` also need the key (`403` without it): another program on the machine, or a website, cannot read the tree or replace it. The page and its icon hold no data and are served without it. The mod sends the tree at most about ten times a second, and always the latest one.
+### Several sessions, one page
+
+One server carries every session on the machine. The first session's server listens; a later session (one that an orchestrating session started for a feature, say) finds it on the port and sends its tree there instead of starting a server of its own, and its pane line ends in `(shared)`. The page shows each session as its own tree, under its title, and groups them by repository: a session in a git worktree sits under its main repository, so an orchestrator and the sessions it started for features end up together. The Edge window opens only when no page is open on the server yet, so a second session does not open a second window.
+
+When the session whose server it is ends, another session takes the port over within a second and the open pages reconnect by themselves. A session that ends leaves the page.
+
+The mod cannot tell which session started which, so the page shows the sessions of one repository side by side, not as parent and children, and two sessions you started yourself in one repository sit together too. The terminal pane still shows only its own session's tree. A server of an older version on the first port is not shared: the new session takes the next port.
+
+The page is plain HTML, CSS and JavaScript, follows the system's light or dark theme and updates through server-sent events. The server listens on `127.0.0.1` only and refuses requests whose `Host` is not `127.0.0.1` or `localhost`. The tree holds tool commands and answers, so `/events`, `/state` and `/hold` also need the key (`403` without it): another program on the machine, or a website, cannot read the tree or replace it. The page, its icon and `/hello` hold no data and are served without it. The mod sends the tree at most about ten times a second, and always the latest one.
 
 ## How it works
 
@@ -97,7 +105,7 @@ A mod is a Claude Code plugin whose hooks module runs inside the app. `agent-tre
 
 The hooks on the engine's events call `next(e)` and change nothing, so the mod only observes: it never changes, blocks or delays what the engine does. Only the mod's own `/agent-tree` command and the drawing of its pane answer for themselves.
 
-The page's server runs through `$.process.spawn` (`node -`, its source on stdin) and lives as long as the module. It prints `BUSY <port>`, `LISTEN <port> <key>` or `FAILED <port> <code>`, which the mod reads into the state (`agent-tree.web`). After each change to the tree the mod sends it to the server with `$.http.fetch` (`POST /state`), and the server streams it to the open pages (`GET /events`).
+The page's server runs through `$.process.spawn` (`node -`, its source on stdin) and lives as long as the module. It prints `BUSY <port>`, `LISTEN <port> <key>`, `SHARED <port>` or `FAILED <port> <code>`, which the mod reads into the state (`agent-tree.web`). When the port is taken, the script asks it `GET /hello`: an agent-tree server answers, and the script holds a request open to it (`GET /hold`) for as long as its session lives, then tries to take the port when that request drops. After each change to the tree the mod sends it to the server with `$.http.fetch` (`POST /state?s=<session id>`, with the session's title and repository), and the server streams the list of sessions to the open pages (`GET /events`).
 
 ### Structure
 
@@ -114,10 +122,10 @@ src/pane.tsx                 draws the terminal pane
 src/state.ts                 shared constants and initial values
 src/format.ts                number and text formatters
 src/pricing.ts               list prices, context windows, cost of a request and the rating of a cost
-src/web/serve.ts             runs the page's server and pushes the tree to it
+src/web/serve.ts             runs the page's server (or shares another session's) and pushes the tree to it
 src/web/window.ts            opens the page as an Edge app window
 src/web/icon.ts              the page's icon (PNG, base64)
-src/web/server.ts            the Node server's source and its ports
+src/web/server.ts            the Node server's source: one server for every session, and its ports
 src/web/page.ts              the web page (HTML, CSS, JS) as a string
 types/index.d.ts             type contract of the state (AgentNode, Tree, Web, View)
 tests/pane.test.tsx          tests with the claude-code/testing kit

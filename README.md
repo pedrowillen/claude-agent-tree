@@ -73,7 +73,7 @@ The terminal pane shows the same cost, rating and context, and the footer adds u
 
 When a subagent finishes, a toast (with its cost and rating) says so; a failed one also raises a system notification. An aborted one (usually your own Esc) only gets the toast.
 
-The server always runs; what you pick decides what is shown. **Web page** shows the address as a toast and in the status line. **Edge window** opens the page as its own window through Edge's app mode (`msedge --app=...`: no tabs, no address bar, with the Agent Tree icon in the title bar and the taskbar); it needs Edge, which comes with Windows 11, so the option is offered on Windows only. If you dismiss the question or type something else, the pane opens (and a choice made before is kept). The answer is kept with `$.store`, which outlives the session; with none kept, a session starts with the pane.
+The server always runs; what you pick decides what is shown. **Web page** shows the address as a toast and in the status line. **Edge window** opens the page as its own window through Edge's app mode (`msedge --app=...`: no tabs, no address bar, with the Agent Tree icon in the title bar and the taskbar); it needs Edge, which comes with Windows 11, so the option is offered on Windows only. If you dismiss the question or type something else, the choice kept before is applied again (the pane when there is none). The answer is kept with `$.store`, which outlives the session; with none kept, a session starts with the pane.
 
 If every port is taken the line reads `Web: ports 47821-47830 in use`; without Node on the `PATH` it reads `Web: node not found`. The pane works the same either way. Each session gets its own server, so a second session takes the next free port.
 

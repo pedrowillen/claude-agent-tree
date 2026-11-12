@@ -1,7 +1,7 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface } from 'claude-code'
 
-import { optionsFor, parseChoice, QUESTION } from './choice'
+import { isPick, optionsFor, parseChoice, QUESTION } from './choice'
 import { pageUrl } from './format'
 import { INITIAL_VIEW, INITIAL_WEB, PANE } from './state'
 import { openWindow } from './web/window'
@@ -35,14 +35,16 @@ export async function reveal($: EngineInterface) {
 
 // applies how to see the agents. With `isAsking` (only `/agent-tree`) it asks first, in the engine's
 // own question dialog, and keeps the answer in `$.store`, which outlives the session. Without it
-// the kept answer is applied; with none, the pane opens, the same as a dismissed dialog.
+// the kept answer is applied; with none, the pane opens. Only an answer that picks an option is
+// kept: free text or a dismissed dialog applies the kept answer again.
 export async function choose($: EngineInterface, isAsking: boolean) {
   let answer = ''
   if (isAsking) {
     const options = optionsFor(await isWindows($))
     answer = await $.ui.ask(QUESTION, { options, header: 'Agent Tree', multiSelect: true }).catch(() => '')
-    // a dismissed dialog keeps what was chosen before
-    if (answer !== '') await $.store.set(KEPT_ANSWER, answer).catch(() => undefined)
+  }
+  if (isPick(answer)) {
+    await $.store.set(KEPT_ANSWER, answer).catch(() => undefined)
   } else {
     const kept = await $.store.get(KEPT_ANSWER).catch(() => undefined)
     answer = typeof kept === 'string' ? kept : ''

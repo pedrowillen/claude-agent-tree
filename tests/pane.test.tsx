@@ -392,4 +392,16 @@ test('the question is asked only by /agent-tree, and its answer comes back at th
   await start() // the newest answer is the one kept
   expect(asks).toBe(2)
   expect(opens).toEqual(['Agents', 'Agents', 'Agents'])
+
+  answer = 'Web page'
+  await $.command.run({ command: 'agent-tree', args: '' })
+  await settle()
+  answer = 'just show me something' // free text picks no option: the kept answer stays and is applied
+  await $.command.run({ command: 'agent-tree', args: '' })
+  await settle()
+  expect(asks).toBe(4)
+  expect(opens).toEqual(['Agents', 'Agents', 'Agents'])
+
+  await start()
+  expect(opens).toEqual(['Agents', 'Agents', 'Agents']) // still the web page, not the pane
 })
